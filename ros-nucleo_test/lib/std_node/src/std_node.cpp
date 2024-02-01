@@ -84,13 +84,13 @@ void periodic_status() {
 }
 
 void process_request_callback(const std_msgs::Int8& msg) {
-    status.data = NODE_STATUS::REQUEST_IN_PROGRESS;
+    status.data = NODE_STATUS::MOTION_IN_PROGRESS;
     status_pub.publish(&status);
     loginfo("Request Received, "+String(msg.data));
 
     _ref__request_callback(msg.data);
 
-    status.data = NODE_STATUS::REQUEST_COMPLETE;
+    status.data = NODE_STATUS::MOTION_COMPLETE;
     status_pub.publish(&status);
     status.data = NODE_STATUS::IDLE;
 }
