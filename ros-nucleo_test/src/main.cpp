@@ -47,10 +47,16 @@ char receivedChars[numChars];
  
 // define pins 
 int BEAM_BREAK_PIN = D9; 
-int SPEED_PIN = A7;
+int SPEED_PIN = A0;
 int INVERT_PIN = D13;
 // 
 
+// scale pins 
+#define SCALE_RELAY__POWER_PIN D11
+#define SCALE_RELAY__TARE_PIN D12
+#define SCALE_SERIAL__RX_PIN D4
+#define SCALE_SERIAL__TX_PIN D1 //not used
+// 
 
 std_msgs::Float32 weight_msg;
 String _weight_topic(NODE_NAME + "_feedback__weight");
@@ -58,6 +64,7 @@ ros::Publisher weight_feedback_pub(_weight_topic.c_str(), &weight_msg);
 
 long start_move_time = millis();
 bool conveyor_moving = false;
+bool conveyor_in_progress = false;
 
 long start_measure_time = millis();
 bool measure_complete = false;
@@ -75,7 +82,10 @@ void toggleScaleTare() {
 }
 
 
+
+
 // conveyor functions 
+
 void move_forward(int speed) {
   digitalWrite(INVERT_PIN, LOW);
   analogWrite(SPEED_PIN, speed); // start
@@ -96,39 +106,69 @@ void stop() {
   conveyor_moving = false;
 }
 
-void move_one_section(){
-  move_forward(255);
-  delay(1000); // so that it moves off of the beam breaker
+void is_conveyor_done_huh() {
+  return (digitalRead(BEAM_BREAK_PIN) == 0);
+}
+
+void move_to_starting_position(int speed, bool delay_bb) {
+  move_forward(speed);
+  if (delay_bb) {
+    delay(1000); // so that it moves off of the beam breaker
+  }
+
   while (true) {
-    delay(100); 
-    loginfo("moving...");
-    if (digitalRead(BEAM_BREAK_PIN) == 0) {
-      // it is broken, so stop the conveyor
+    // delay(100); 
+    if (is_conveyor_done_huh()) {
+      // it is done moving, so stop the conveyor
       stop(); 
       break; 
     } 
   }
 }
 
-void start_motion() {
-  loginfo("start_motion");
-  move_forward(255);
-  loginfo("motion complete");
+void conveyor_start_section(int speed){ // conveyor_start_section(255)
+  conveyor_in_progress = true;
+  move_to_starting_position(speed, false); // this will reset it to the beam break
+  move_to_starting_position(speed, true); // this one will now go to the next section
+
+  move_backward(speed);
+  delay(1000);
+  stop();
+  conveyor_in_progress = false;
 }
 
-void check_conveyor() {
-  if (start_move_time+1000 < millis() && digitalRead(BEAM_BREAK_PIN) == 0) { 
-    //wait 1 second for the conveyor to move off the beam breaker
-    stop();
-    loginfo("beam broken");
-  }
-  //feedback_msg.data = 
-  //feedback_pub.publish(&feedback_msg);
-}
 
-bool verify_motion_complete() {
-  return !conveyor_moving && digitalRead(BEAM_BREAK_PIN) == 0;
-}
+
+// void start_motion() {
+//   loginfo("start_motion");
+//   move_forward(255);
+//   loginfo("motion complete");
+// }
+
+// void check_conveyor() {
+//   if (start_move_time+1000 < millis() && digitalRead(BEAM_BREAK_PIN) == 0) { 
+//     //wait 1 second for the conveyor to move off the beam breaker
+//     stop();
+//     loginfo("beam broken");
+//   }
+//   //feedback_msg.data = 
+//   //feedback_pub.publish(&feedback_msg);
+// }
+
+// bool verify_motion_complete() {
+//   return !conveyor_moving && digitalRead(BEAM_BREAK_PIN) == 0;
+// }
+
+
+
+
+
+
+
+
+
+// scale code 
+
 
 void start_measure() {
   loginfo("start_measure");
@@ -179,6 +219,12 @@ void parseIncomingData() {
     }
 }
 
+
+
+// scale functions 
+
+
+
 // loop setup functions 
 void setup() {
   init_std_node();
@@ -200,9 +246,12 @@ void setup() {
   pinMode(SCALE_RELAY__POWER_PIN, OUTPUT);
   pinMode(SCALE_RELAY__TARE_PIN, OUTPUT);
 
-
   loginfo("setup() Complete");
 }
+
+
+
+
 
 void loop() {
   periodic_status();
@@ -210,5 +259,19 @@ void loop() {
   check_conveyor();
   check_measure();
   parseIncomingData();
+
+  // // conveyor code
+  // move_forward(255); 
+  // delay(3000);
+  // stop();
+  // delay(500);
+
+  // // scale code 
+
+
+
+  // // ros code 
+  // periodic_status();
+  // nh.spinOnce();
   // delay(10);
 }
