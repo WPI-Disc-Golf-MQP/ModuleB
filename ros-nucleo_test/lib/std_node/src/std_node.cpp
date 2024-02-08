@@ -18,7 +18,7 @@
 
 enum NODE_STATUS {
     INITIALIZING_NODE = 0, 
-    IDLE = 1, 
+    NODE_IDLE = 1, 
     MOTION_IN_PROGRESS = 2, 
     MOTION_COMPLETE = 3, 
     MEASURE_IN_PROGRESS = 4,
@@ -58,7 +58,7 @@ void init_std_node() {
     nh.subscribe(request_sub);
     nh.setSpinTimeout(100);
     request.data = REQUEST::INITIALIZING;
-    status.data = NODE_STATUS::IDLE;
+    status.data = NODE_STATUS::NODE_IDLE;
     status_pub.publish(&status);
     last_status = millis();
 }
@@ -79,6 +79,11 @@ void set_request_callbacks(std::function<void(void)> _start_measure_callback,std
 void publish_status() {
     status_pub.publish(&status);
     last_status = millis();
+}
+
+void set_status(NODE_STATUS new_status) {
+    status.data = new_status;
+    publish_status();
 }
 
 void periodic_status() {
