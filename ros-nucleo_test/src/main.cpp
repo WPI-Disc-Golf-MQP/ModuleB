@@ -85,7 +85,6 @@ void toggleScaleTare() {
 
 
 // conveyor functions 
-
 void move_forward(int speed) {
   digitalWrite(INVERT_PIN, LOW);
   analogWrite(SPEED_PIN, speed); // start
@@ -106,7 +105,7 @@ void stop() {
   conveyor_moving = false;
 }
 
-void is_conveyor_done_huh() {
+bool is_conveyor_done_huh() {
   return (digitalRead(BEAM_BREAK_PIN) == 0);
 }
 
@@ -139,25 +138,25 @@ void conveyor_start_section(int speed){ // conveyor_start_section(255)
 
 
 
-// void start_motion() {
-//   loginfo("start_motion");
-//   move_forward(255);
-//   loginfo("motion complete");
-// }
+void start_motion() {
+  loginfo("start_motion");
+  move_forward(255);
+  loginfo("motion complete");
+}
 
-// void check_conveyor() {
-//   if (start_move_time+1000 < millis() && digitalRead(BEAM_BREAK_PIN) == 0) { 
-//     //wait 1 second for the conveyor to move off the beam breaker
-//     stop();
-//     loginfo("beam broken");
-//   }
-//   //feedback_msg.data = 
-//   //feedback_pub.publish(&feedback_msg);
-// }
+void check_conveyor() {
+  if (start_move_time+1000 < millis() && digitalRead(BEAM_BREAK_PIN) == 0) { 
+    //wait 1 second for the conveyor to move off the beam breaker
+    stop();
+    loginfo("beam broken");
+  }
+  //feedback_msg.data = 
+  //feedback_pub.publish(&feedback_msg);
+}
 
-// bool verify_motion_complete() {
-//   return !conveyor_moving && digitalRead(BEAM_BREAK_PIN) == 0;
-// }
+bool verify_motion_complete() {
+  return !conveyor_moving && digitalRead(BEAM_BREAK_PIN) == 0;
+}
 
 
 
@@ -221,7 +220,7 @@ void parseIncomingData() {
 
 
 
-// scale functions 
+// END scale functions 
 
 
 
