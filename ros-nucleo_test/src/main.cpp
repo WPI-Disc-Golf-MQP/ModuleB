@@ -31,8 +31,6 @@ long start_measure_time = millis();
 bool measure_complete = false;
 
 
-
-
 // -- conveyor functions 
 std_msgs::Int8 conveyor_msg;
 String _conveyor_topic(NODE_NAME + "_feedback__conveyor");
@@ -61,6 +59,10 @@ void move_backward(int speed = 255) {
 
 void stop() {
   analogWrite(SPEED_PIN, 0); // stop
+  if (conveyor_state != CONVEYOR_STATE::CONVEYOR_IDLE) {
+    loginfo("stop");
+    conveyor_state = CONVEYOR_STATE::CONVEYOR_IDLE;
+  }
 }
 
 bool beam_broken() {
@@ -92,11 +94,12 @@ void check_conveyor() {
       if (last_conveyor_center_time+1000 < millis()) {
         stop();
         conveyor_state = CONVEYOR_STATE::CONVEYOR_IDLE;
+        send_status(NODE_STATUS::MOTION_COMPLETE);
       }
       break;
     case CONVEYOR_STATE::CONVEYOR_IDLE:
       stop();
-      set_status(NODE_STATUS::MOTION_COMPLETE);
+      status.data = NODE_STATUS::IDLE;
       break;
     default:
       logwarn("Invalid conveyor state");
@@ -104,9 +107,10 @@ void check_conveyor() {
   }
 
   // publish state to pi 
-  if (conveyor_msg.data != conveyor_state) {
-    conveyor_msg.data = conveyor_state;
-    conveyor_feedback_pub.publish(&conveyor_msg);
+  if (conveyor_msg.data != (int) conveyor_state) {
+      conveyor_msg.data = conveyor_state;
+      loginfo("publishing conveyor state");
+      conveyor_feedback_pub.publish(&conveyor_msg);
   }
 }
 
@@ -117,6 +121,14 @@ bool verify_motion_complete() {
 // -- loop/setup functions 
 void setup() {
   init_std_node();
+  set_request_callbacks(
+    [] () {}, 
+    [] () {return true;}, 
+    start_conveyor, 
+    verify_motion_complete, 
+    stop);
+  
+  //Register ROS publishers
   nh.advertise(weight_feedback_pub);
   nh.advertise(conveyor_feedback_pub);
   

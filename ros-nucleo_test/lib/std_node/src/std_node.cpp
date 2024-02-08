@@ -18,7 +18,7 @@
 
 enum NODE_STATUS {
     INITIALIZING_NODE = 0, 
-    NODE_IDLE = 1, 
+    IDLE = 1, 
     MOTION_IN_PROGRESS = 2, 
     MOTION_COMPLETE = 3, 
     MEASURE_IN_PROGRESS = 4,
@@ -43,7 +43,7 @@ HardwareSerial hserial(PA_15, PA_2); // NUCLEO-F303K8 RX, TX
 ros::NodeHandle nh;
 std_msgs::Int8 request;
 std::function<bool(void)> _ref__verify_measure_complete_callback, _ref__verify_motion_complete_callback;
-std::function<void(void)> _ref__start_motion_callback, _ref__start_measure_callback;
+std::function<void(void)> _ref__start_motion_callback, _ref__start_measure_callback, _ref__idle_callback;
 std_msgs::Int8 status;
 String _status_topic(NODE_NAME + "_status");
 ros::Publisher status_pub(_status_topic.c_str(), &status);
@@ -58,7 +58,7 @@ void init_std_node() {
     nh.subscribe(request_sub);
     nh.setSpinTimeout(100);
     request.data = REQUEST::INITIALIZING;
-    status.data = NODE_STATUS::NODE_IDLE;
+    status.data = NODE_STATUS::IDLE;
     status_pub.publish(&status);
     last_status = millis();
 }
@@ -68,11 +68,12 @@ void loginfo(String msg) { nh.loginfo((get_node_tag()+msg).c_str()); };
 void logwarn(String msg) { nh.logwarn((get_node_tag()+msg).c_str()); };
 void logerr(String msg) { nh.logerror((get_node_tag()+msg).c_str()); };
 
-void set_request_callbacks(std::function<void(void)> _start_measure_callback,std::function<bool(void)> _verify_measure_complete_callback, std::function<void(void)> _start_motion_callback, std::function<bool(void)> _verify_motion_complete_callback) { 
-    _start_measure_callback = std::bind(_ref__start_measure_callback); 
-    _verify_measure_complete_callback = std::bind(_ref__verify_measure_complete_callback);
-    _start_motion_callback = std::bind(_ref__start_motion_callback);
-    _verify_motion_complete_callback = std::bind(_ref__verify_motion_complete_callback);
+void set_request_callbacks(std::function<void(void)> _start_measure_callback,std::function<bool(void)> _verify_measure_complete_callback, std::function<void(void)> _start_motion_callback, std::function<bool(void)> _verify_motion_complete_callback, std::function<void(void)> _idle_callback) { 
+    _ref__start_measure_callback = std::bind(_start_measure_callback); 
+    _ref__verify_measure_complete_callback = std::bind(_verify_measure_complete_callback);
+    _ref__start_motion_callback = std::bind(_start_motion_callback);
+    _ref__verify_motion_complete_callback = std::bind(_verify_motion_complete_callback);
+    _ref__idle_callback = std::bind(_idle_callback);
     };
 
             
@@ -81,7 +82,7 @@ void publish_status() {
     last_status = millis();
 }
 
-void set_status(NODE_STATUS new_status) {
+void send_status(NODE_STATUS new_status) {
     status.data = new_status;
     publish_status();
 }
@@ -97,14 +98,16 @@ void process_request_callback(const std_msgs::Int8& msg) {
     std_msgs::Int8 onetime_status;
     switch (msg.data) {
         case REQUEST::START_MOTION:
-            status.data = NODE_STATUS::MOTION_IN_PROGRESS; break;
+            status.data = NODE_STATUS::MOTION_IN_PROGRESS; 
             status_pub.publish(&status);
-            _ref__start_motion_callback();
+            _ref__start_motion_callback(); 
+            break;
         case REQUEST::START_MEASURE:
-            status.data = NODE_STATUS::MEASURE_IN_PROGRESS; break;
+            status.data = NODE_STATUS::MEASURE_IN_PROGRESS; 
             status_pub.publish(&status);
             request.data = msg.data;
             _ref__start_measure_callback();
+            break;
         case REQUEST::VERIFY__MOTION_COMPLETE:
             verify_result = _ref__verify_motion_complete_callback();
             onetime_status.data = verify_result ? NODE_STATUS::MOTION_COMPLETE : NODE_STATUS::MOTION_IN_PROGRESS;
@@ -114,6 +117,11 @@ void process_request_callback(const std_msgs::Int8& msg) {
             verify_result = _ref__verify_measure_complete_callback();
             onetime_status.data = verify_result ? NODE_STATUS::MEASURE_COMPLETE : NODE_STATUS::MEASURE_IN_PROGRESS;
             status_pub.publish(&onetime_status);
+            break;
+        case REQUEST::WAITING:
+            status.data = NODE_STATUS::IDLE; 
+            status_pub.publish(&status);
+            _ref__idle_callback();
             break;
         default: 
             return;
