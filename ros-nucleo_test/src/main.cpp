@@ -1,73 +1,132 @@
-/*
- * rosserial Example Node: LED
- */
-
-
-
 #define NODE_NAME String("module_b")
 #define STATUS_FREQ 1500 // ms
-#define SCALE_MEASURE_DURATION 1500 // ms
 
 #include <std_node.cpp>
 #include <std_msgs/Bool.h>
 #include <std_msgs/Float32.h>
 #include <Arduino.h>
+#include <HardwareSerial.h> //for scale
+
+// ----- MAIN CONVEYOR -----
+
+int BEAM_BREAK_PIN = D2; 
+int SPEED_PIN = A0;
+int INVERT_PIN = D13;
+
+// -- conveyor feedback 
+std_msgs::Int8 conveyor_msg;
+String _conveyor_topic(NODE_NAME + "_feedback__conveyor");
+ros::Publisher conveyor_feedback_pub(_conveyor_topic.c_str(), &conveyor_msg);
+
+enum CONVEYOR_STATE {
+    CONVEYOR_IDLE = 0, 
+    MOVING_TO_CENTER = 1, 
+    MOVING_TO_NEXT_DISC = 2, 
+    BACKUP = 3};
+
+CONVEYOR_STATE conveyor_state = CONVEYOR_STATE::CONVEYOR_IDLE; 
+long last_conveyor_center_time = millis();
+
+void move_forward(int speed = 230) {
+  digitalWrite(INVERT_PIN, LOW);
+  analogWrite(SPEED_PIN, speed); // start
+  loginfo("move forward");
+}
+
+void move_backward(int speed = 230) {
+  digitalWrite(INVERT_PIN, HIGH);
+  analogWrite(SPEED_PIN, speed); // start
+  loginfo("move backward");
+}
+
+void stop() {
+  analogWrite(SPEED_PIN, 0); // stop
+  if (conveyor_state != CONVEYOR_STATE::CONVEYOR_IDLE) {
+    loginfo("stop");
+    conveyor_state = CONVEYOR_STATE::CONVEYOR_IDLE;
+  }
+}
+
+bool beam_broken() {
+  return (digitalRead(BEAM_BREAK_PIN) == 0);
+}
+
+void start_conveyor() {
+  loginfo("start_conveyor");
+  conveyor_state = CONVEYOR_STATE::MOVING_TO_CENTER;
+  move_forward();
+}
+
+void check_conveyor() {
+  switch (conveyor_state){
+    case CONVEYOR_STATE::MOVING_TO_CENTER:
+      if (beam_broken()) {
+        conveyor_state = CONVEYOR_STATE::MOVING_TO_NEXT_DISC;
+        last_conveyor_center_time = millis();
+      } 
+      break;
+    case CONVEYOR_STATE::MOVING_TO_NEXT_DISC:
+      if (beam_broken() && last_conveyor_center_time+1000 < millis()) {
+        move_backward();
+        conveyor_state = CONVEYOR_STATE::BACKUP;
+        last_conveyor_center_time = millis();
+      } 
+      break;
+    case CONVEYOR_STATE::BACKUP:
+      if (last_conveyor_center_time+500 < millis()) {
+        stop();
+        conveyor_state = CONVEYOR_STATE::CONVEYOR_IDLE;
+        send_status(NODE_STATUS::MOTION_COMPLETE);
+        status.data = NODE_STATUS::IDLE;
+      }
+      break;
+    case CONVEYOR_STATE::CONVEYOR_IDLE:
+      stop();
+      break;
+    default:
+      logwarn("Invalid conveyor state");
+      break;
+  }
+
+  // publish state to pi 
+  if (conveyor_msg.data != (int) conveyor_state) {
+      conveyor_msg.data = conveyor_state;
+      loginfo("publishing conveyor state");
+      conveyor_feedback_pub.publish(&conveyor_msg);
+  }
+}
+
+bool verify_motion_complete() {
+  return conveyor_state == CONVEYOR_STATE::CONVEYOR_IDLE;
+}
+
+// ----- SCALE -----
 
 #define SCALE_SERIAL__RX_PIN D4
 #define SCALE_SERIAL__TX_PIN D5 //not used
 
-#define SCALE_RELAY__POWER_PIN D6
-#define SCALE_RELAY__TARE_PIN D7
+#define SCALE_RELAY__POWER_PIN D11 // D6
+#define SCALE_RELAY__TARE_PIN D12 // D7
 
-/* ------------- *
-*   Connections
-* -------------- *
-* Nucleo <-> RS232 converter
-* D4 <-> RX
-* 5v <-> VCC
-* GND <-> GND
-* (D5/TX are not used)
-* 
-* Nucleo <-> Power Relay
-* D6 <-> Signal IN (Purple)
-* GND <-> Signal GND (Blue)
-* 
-* Nucleo <-> Tare Relay
-* D7 <-> Signal IN (Grey)
-* GND <-> Signal GND (Grey)
-*/
-
-/* Scale Serial Configuration */
 HardwareSerial scaleSerial(SCALE_SERIAL__RX_PIN, SCALE_SERIAL__TX_PIN); // RX, TX
 const byte numChars = 16;
-
-/* Scale Globals */
 float lastWeight = 0.0;
 char receivedChars[numChars];
- 
-// define pins 
-int BEAM_BREAK_PIN = D9; 
-int SPEED_PIN = A0;
-int INVERT_PIN = D13;
-// 
-
-// scale pins 
-#define SCALE_RELAY__POWER_PIN D11
-#define SCALE_RELAY__TARE_PIN D12
-#define SCALE_SERIAL__RX_PIN D4
-#define SCALE_SERIAL__TX_PIN D1 //not used
-// 
 
 std_msgs::Float32 weight_msg;
 String _weight_topic(NODE_NAME + "_feedback__weight");
 ros::Publisher weight_feedback_pub(_weight_topic.c_str(), &weight_msg);
 
-long start_move_time = millis();
-bool conveyor_moving = false;
-bool conveyor_in_progress = false;
+enum SCALE_STATE {
+    SCALE_IDLE = 0,
+    MEASURING = 1, 
+    TARING = 2,
+    POWERING_ON = 3,
+    POWERING_OFF = 4};
+SCALE_STATE scale_state = SCALE_STATE::SCALE_IDLE;
+unsigned long last_scale_data_time = millis();
+unsigned long start_scale_action_time = millis();
 
-long start_measure_time = millis();
-bool measure_complete = false;
 
 void toggleScalePower() {
     digitalWrite(SCALE_RELAY__POWER_PIN, HIGH);
@@ -81,109 +140,52 @@ void toggleScaleTare() {
     digitalWrite(SCALE_RELAY__TARE_PIN, LOW);
 }
 
-
-
-
-// conveyor functions 
-void move_forward(int speed) {
-  digitalWrite(INVERT_PIN, LOW);
-  analogWrite(SPEED_PIN, speed); // start
-  loginfo("move forward");
-  start_move_time = millis();
-  conveyor_moving = true;
-}
-
-void move_backward(int speed) {
-  digitalWrite(INVERT_PIN, HIGH);
-  analogWrite(SPEED_PIN, speed); // start
-  loginfo("move backward");
-  conveyor_moving = true;
-}
-
-void stop() {
-  analogWrite(SPEED_PIN, 0); // stop
-  conveyor_moving = false;
-}
-
-bool is_conveyor_done_huh() {
-  return (digitalRead(BEAM_BREAK_PIN) == 0);
-}
-
-void move_to_starting_position(int speed, bool delay_bb) {
-  move_forward(speed);
-  if (delay_bb) {
-    delay(1000); // so that it moves off of the beam breaker
-  }
-
-  while (true) {
-    // delay(100); 
-    if (is_conveyor_done_huh()) {
-      // it is done moving, so stop the conveyor
-      stop(); 
-      break; 
-    } 
-  }
-}
-
-void conveyor_start_section(int speed){ // conveyor_start_section(255)
-  conveyor_in_progress = true;
-  move_to_starting_position(speed, false); // this will reset it to the beam break
-  move_to_starting_position(speed, true); // this one will now go to the next section
-
-  move_backward(speed);
-  delay(1000);
-  stop();
-  conveyor_in_progress = false;
-}
-
-
-
-void start_motion() {
-  loginfo("start_motion");
-  move_forward(255);
-  loginfo("motion complete");
-}
-
-void check_conveyor() {
-  if (start_move_time+1000 < millis() && digitalRead(BEAM_BREAK_PIN) == 0) { 
-    //wait 1 second for the conveyor to move off the beam breaker
-    stop();
-    loginfo("beam broken");
-  }
-  //feedback_msg.data = 
-  //feedback_pub.publish(&feedback_msg);
-}
-
-bool verify_motion_complete() {
-  return !conveyor_moving && digitalRead(BEAM_BREAK_PIN) == 0;
-}
-
-
-
-
-
-
-
-
-
-// scale code 
-
-
 void start_measure() {
   loginfo("start_measure");
-  start_measure_time = millis();
-  measure_complete = false;
+  start_scale_action_time = millis();
+  scale_state = SCALE_STATE::MEASURING;
 }
 
 void check_measure() {
-  if (start_measure_time+SCALE_MEASURE_DURATION < millis()) {
-    loginfo("measure complete");
-    measure_complete = true;
+  switch (scale_state) {
+  case SCALE_STATE::MEASURING:
+    if (start_scale_action_time+1500 < millis()) { //measurement complete
+      weight_msg.data = lastWeight;
+      send_status(NODE_STATUS::MEASURE_COMPLETE);
+      scale_state = SCALE_STATE::SCALE_IDLE;
+    }
+    break;
+  case SCALE_STATE::TARING:
+    if (start_scale_action_time+2000 < millis()) { //button press complete
+      digitalWrite(SCALE_RELAY__TARE_PIN, LOW);
+      scale_state = SCALE_STATE::SCALE_IDLE;
+    }
+    break;
+  case SCALE_STATE::POWERING_ON:
+    if (start_scale_action_time+2000 < millis()) { //button press complete
+      digitalWrite(SCALE_RELAY__POWER_PIN, LOW);
+      scale_state = SCALE_STATE::SCALE_IDLE;
+    }
+    break;
+  case SCALE_STATE::POWERING_OFF:
+    if (start_scale_action_time+2000 < millis()) { //button press complete
+      digitalWrite(SCALE_RELAY__POWER_PIN, LOW);
+      scale_state = SCALE_STATE::SCALE_IDLE;
+    }
+    break;
+  case SCALE_STATE::SCALE_IDLE:
+    break;
+  default:
+    break;
+  }
+
+  if (last_scale_data_time+1000 < millis()) { //If we haven't heard from the scale, turn it on!
+    scale_state = SCALE_STATE::POWERING_ON;
   }
 }
 
 bool verify_measure_complete() {
-  return measure_complete;
+  return scale_state == SCALE_STATE::SCALE_IDLE;
 }
 
 void parseIncomingData() {
@@ -206,7 +208,7 @@ void parseIncomingData() {
                 ndx = 0;
                 if (atoff(receivedChars) != lastWeight) {
                     lastWeight = atoff(receivedChars);
-                    if (!measure_complete) {
+                    if (scale_state == SCALE_STATE::MEASURING) {
                       weight_msg.data = lastWeight;
                       weight_feedback_pub.publish(&weight_msg);
                     }
@@ -218,19 +220,19 @@ void parseIncomingData() {
     }
 }
 
-
-
-// END scale functions 
-
-
-
-// loop setup functions 
+// ----- loop/setup functions -----
 void setup() {
   init_std_node();
+  set_request_callbacks(
+    start_measure, 
+    verify_measure_complete, 
+    start_conveyor, 
+    verify_motion_complete, 
+    stop);
+  
+  //Register ROS publishers
   nh.advertise(weight_feedback_pub);
-  set_request_callbacks(start_measure, verify_measure_complete, start_motion, verify_motion_complete);
-
-  pinMode(LED_BUILTIN, OUTPUT);
+  nh.advertise(conveyor_feedback_pub);
   
   // conveyor pins 
   pinMode(BEAM_BREAK_PIN, INPUT_PULLUP) ;
@@ -238,10 +240,7 @@ void setup() {
   pinMode(INVERT_PIN, OUTPUT) ;
 
   // scale pins
-
   scaleSerial.begin(9600);
-
-  pinMode(LED_BUILTIN, OUTPUT);
   pinMode(SCALE_RELAY__POWER_PIN, OUTPUT);
   pinMode(SCALE_RELAY__TARE_PIN, OUTPUT);
 
@@ -249,28 +248,17 @@ void setup() {
 }
 
 
-
-
-
 void loop() {
-  periodic_status();
-  nh.spinOnce();
-  check_conveyor();
-  check_measure();
-  parseIncomingData();
-
-  // // conveyor code
-  // move_forward(255); 
-  // delay(3000);
-  // stop();
-  // delay(500);
-
-  // // scale code 
-
-
-
-  // // ros code 
   // periodic_status();
   // nh.spinOnce();
-  // delay(10);
+  check_conveyor();
+  // parseIncomingData();
+  // check_measure();
+
+  // ----- testing ----- 
+  if (verify_motion_complete()) {
+    Serial.println("farts");
+    delay(5000);
+    start_conveyor();
+  }
 }
