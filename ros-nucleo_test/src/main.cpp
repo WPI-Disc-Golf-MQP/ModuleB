@@ -249,9 +249,16 @@ void setup() {
 
 
 void loop() {
-  periodic_status();
-  nh.spinOnce();
+  // periodic_status();
+  // nh.spinOnce();
   check_conveyor();
-  parseIncomingData();
-  check_measure();
+  // parseIncomingData();
+  // check_measure();
+
+  // ----- testing ----- 
+  if (verify_motion_complete()) {
+    Serial.println("farts");
+    delay(5000);
+    start_conveyor();
+  }
 }
