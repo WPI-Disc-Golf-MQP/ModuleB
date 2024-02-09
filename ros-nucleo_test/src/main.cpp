@@ -27,13 +27,13 @@ enum CONVEYOR_STATE {
 CONVEYOR_STATE conveyor_state = CONVEYOR_STATE::CONVEYOR_IDLE; 
 long last_conveyor_center_time = millis();
 
-void move_forward(int speed = 255) {
+void move_forward(int speed = 230) {
   digitalWrite(INVERT_PIN, LOW);
   analogWrite(SPEED_PIN, speed); // start
   loginfo("move forward");
 }
 
-void move_backward(int speed = 255) {
+void move_backward(int speed = 230) {
   digitalWrite(INVERT_PIN, HIGH);
   analogWrite(SPEED_PIN, speed); // start
   loginfo("move backward");
@@ -73,7 +73,7 @@ void check_conveyor() {
       } 
       break;
     case CONVEYOR_STATE::BACKUP:
-      if (last_conveyor_center_time+1000 < millis()) {
+      if (last_conveyor_center_time+500 < millis()) {
         stop();
         conveyor_state = CONVEYOR_STATE::CONVEYOR_IDLE;
         send_status(NODE_STATUS::MOTION_COMPLETE);
