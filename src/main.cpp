@@ -245,6 +245,148 @@ void parseIncomingData() {
     }
 }
 
+// ----- FLEX ----- 
+
+MODULE* flex_module;
+int dir_pin = D11;// Verify this pin 
+int step_pin = D12;// Verify this pin 
+int sleep_pin = D6; // Verify this pin 
+int UPPER_LIMIT_SWITCH_PIN = D3; // Verify this pin 
+int LOWER_LIMIT_SWITCH_PIN = D4; // Verify this pin
+
+enum FLEX_STATE {
+  FLEX_IDLE = 0,
+  FLEX_RAISING = 1,
+  FLEX_SPINNING = 2,
+  FLEX_LOWERING = 3
+};
+FLEX_STATE flex_state = FLEX_STATE::FLEX_IDLE;
+
+
+bool upper_limit_switched() { // FINISH THIS FUNCTION after wiring
+  return (digitalRead(UPPER_LIMIT_SWITCH_PIN) == 1);
+}
+
+bool lower_limit_switched() { // FINISH THIS FUNCTION after wiring
+  return (digitalRead(LOWER_LIMIT_SWITCH_PIN) == 1);
+}
+
+bool verify_flex_complete() {
+  return flex_state == FLEX_STATE::FLEX_IDLE;
+}
+
+bool run_yaxis_motor = false;
+long yaxis_motor_last_step = millis();
+bool yaxis_motor_last_digital_write = false;
+
+bool run_spin_motor = false; 
+long spin_motor_last_step = millis();
+bool spin_motor_last_digital_write = false;
+
+
+void start_flex() {
+  flex_state = FLEX_STATE::FLEX_RAISING;
+  run_yaxis_motor = true; 
+  yaxis_motor_last_step = millis();
+}
+
+void stop_flex() {
+  run_yaxis_motor = false; 
+  run_spin_motor = false; 
+  flex_state = FLEX_STATE::FLEX_IDLE;
+}
+
+void calibrate_flex() {
+  loginfo("calibrate flex; TODO"); //TODO: Implement calibration
+}
+
+void check_flex() {
+
+  // drive the motor if the flag has been set to run it // TODO implimet the sleep pin as well 
+  if ((yaxis_motor_last_step+2 < millis()) && run_yaxis_motor == true) {
+    loginfo("triggered correctly");
+
+    // digitalWrite(step_pin, !yaxis_motor_last_digital_write);
+    digitalWrite(step_pin, HIGH);
+    delay(2);
+    digitalWrite(step_pin, LOW);
+    delay(2); 
+
+    yaxis_motor_last_digital_write = !yaxis_motor_last_digital_write; 
+    yaxis_motor_last_step = millis(); 
+  }
+
+  if ((spin_motor_last_step+2 < millis()) && run_spin_motor == true) {
+    digitalWrite(step_pin, !spin_motor_last_digital_write);
+    spin_motor_last_digital_write = !spin_motor_last_digital_write; 
+    spin_motor_last_step = millis();
+  }
+
+
+  switch (flex_state) {
+    case FLEX_STATE::FLEX_IDLE:
+      
+      break;
+    case FLEX_STATE::FLEX_RAISING:
+
+      if (upper_limit_switched() == true) {
+        run_yaxis_motor = false; 
+        flex_state = FLEX_STATE::FLEX_SPINNING; 
+        run_spin_motor = true; 
+        spin_motor_last_step = millis();
+      }
+      
+      break;
+    case FLEX_STATE::FLEX_SPINNING:
+    //TALK TO THE PI TO TAKE PICTURES
+      break;
+    case FLEX_STATE::FLEX_LOWERING:
+      if (lower_limit_switched()) {
+        run_yaxis_motor = false; 
+        run_spin_motor = false; 
+        flex_state = FLEX_STATE::FLEX_IDLE; 
+        flex_module->publish_status(MODULE_STATUS::COMPLETE);
+      }
+      
+      break;
+  }
+  flex_module->publish_state((int) flex_state);
+};
+
+// ----- HEIGHT -----
+MODULE* height_module;
+int HEIGHT_SENSOR_PIN = A1; //TODO: VERIFY PIN NUMBER
+
+enum HEIGHT_STATE {
+    HEIGHT_IDLE = 0,
+};
+HEIGHT_STATE height_state = HEIGHT_STATE::HEIGHT_IDLE;
+
+bool height_sensor_switched() {
+  return (digitalRead(HEIGHT_SENSOR_PIN) == 1);
+}
+
+void start_height() {
+  loginfo("start height; TODO"); //TODO: Implement height
+}
+
+void stop_height() {
+  loginfo("stop height; TODO"); //TODO: Implement height
+}
+
+void calibrate_height() {
+  loginfo("calibrate height; TODO"); //TODO: Implement height
+}
+
+void verify_height_complete() {
+  loginfo("verify height complete; TODO"); //TODO: Implement height
+}
+
+void check_height() {
+  loginfo("check height; TODO"); //TODO: Implement height
+}
+
+
 // ----- loop/setup functions -----
 void setup() {
   init_std_node();
@@ -253,12 +395,25 @@ void setup() {
     verify_scale_complete, 
     stop_scale,
     calibrate_scale);
+
   main_conveyor_module = init_module("main_conveyor",
     start_conveyor, 
     verify_conveyor_complete, 
     stop_conveyor,
     calibrate_conveyor);
   
+  // flex_module = init_module("flex",
+  //   start_flex, 
+  //   verify_flex_complete, 
+  //   stop_flex,
+  //   calibrate_flex);
+
+  // height_module = init_module("height",
+  //   start_height,
+  //   verify_height_complete,
+  //   stop_height,
+  //   calibrate_height);
+
   //Register ROS publishers
   nh.advertise(weight_feedback_pub);
   
@@ -273,6 +428,16 @@ void setup() {
   pinMode(SCALE_RELAY__POWER_PIN, OUTPUT);
   pinMode(SCALE_RELAY__TARE_PIN, OUTPUT);
 
+  // flex pins
+  // pinMode(dir_pin, OUTPUT);
+  // pinMode(step_pin, OUTPUT);
+  // pinMode(sleep_pin, OUTPUT);
+  // pinMode(UPPER_LIMIT_SWITCH_PIN, INPUT_PULLUP);
+  // pinMode(LOWER_LIMIT_SWITCH_PIN, INPUT_PULLUP);
+
+  // height pins
+  //pinMode(HEIGHT_SENSOR_PIN, INPUT_PULLUP);
+
   loginfo("setup() Complete");
 }
 
@@ -283,6 +448,8 @@ void loop() {
   parseIncomingData();
   check_scale();
   check_conveyor();
+  //check_flex();
+  //check_height();
 
   // ----- testing ----- 
   // if (verify_motion_complete()) {
