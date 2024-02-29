@@ -100,9 +100,9 @@ struct MODULE {
 
     void publish_state(int new_state) {
         if (_state_msg.data != new_state) {
+            _state_msg.data = new_state;
             state_pub.publish(&_state_msg);
         }
-        _state_msg.data = new_state;
     }
 
     void process_request_callback(const std_msgs::Int8& msg) {
