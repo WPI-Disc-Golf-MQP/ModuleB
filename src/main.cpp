@@ -398,11 +398,11 @@ void setup() {
     stop_conveyor,
     calibrate_conveyor);
   
-  // flex_module = init_module("flex",
-  //   start_flex, 
-  //   verify_flex_complete, 
-  //   stop_flex,
-  //   calibrate_flex);
+  flex_module = init_module("flex",
+    start_flex, 
+    verify_flex_complete, 
+    stop_flex,
+    calibrate_flex);
 
   // height_module = init_module("height",
   //   start_height,
@@ -444,7 +444,7 @@ void loop() {
   parseIncomingData();
   check_scale();
   check_conveyor();
-  //check_flex();
+  check_flex();
   //check_height();
 
   // ----- testing ----- 
