@@ -10,8 +10,8 @@
 // ----- MAIN CONVEYOR -----
 
 MODULE* main_conveyor_module;
-int EDGE_BEAM_BREAK_PIN = D2; 
-int CENTER_BEAM_BREAK_PIN = D3; //TODO: VERIFY PIN NUMBER
+int BACKUP_BEAM_BREAK_PIN = D2; // Verified this pin as the black beam break 
+int CENTER_BEAM_BREAK_PIN = D3; //Verified this pin as the green beam break
 int SPEED_PIN = A0;
 int INVERT_PIN = D13;
 
@@ -37,36 +37,32 @@ void move_backward(int speed = 230) {
   loginfo("conveyor moving backward");
 }
 
-bool edge_beam_broken() {
-  return (digitalRead(EDGE_BEAM_BREAK_PIN) == 0);
+bool backup_beam_broken() {
+  return (digitalRead(BACKUP_BEAM_BREAK_PIN) == 0);
 }
 
 bool center_beam_broken() {
   return (digitalRead(CENTER_BEAM_BREAK_PIN) == 0);
 }
 
+unsigned long started_advancing_time = millis();
 void start_conveyor() {
   if (conveyor_state == CONVEYOR_STATE::CONVEYOR_IDLE) {
-    loginfo("start_conveyor in IDLE --> moving to center");
+    loginfo("start_conveyor in IDLE --> advancing disc");
     conveyor_state = CONVEYOR_STATE::ADVANCING_TO_NEXT_DISC_EDGE;
+    started_advancing_time = millis();
     move_forward();
   } else if (conveyor_state == CONVEYOR_STATE::WAITING_FOR_INTAKE) {
-    loginfo("start_conveyor in WAITING FOR INTAKE --> advancing to next disc edge");
+    loginfo("start_conveyor in WAITING FOR INTAKE --> centering discs");
     conveyor_state = CONVEYOR_STATE::MOVING_TO_CENTER;
     move_forward();
   } else {
     logwarn("start_conveyor called in invalid state, " + String((int)conveyor_state));
-  
-  }
-  
+  }  
 }
 
 void stop_conveyor() {
   analogWrite(SPEED_PIN, 0); // stop
-  if (conveyor_state != CONVEYOR_STATE::CONVEYOR_IDLE) {
-    loginfo("stop");
-    conveyor_state = CONVEYOR_STATE::CONVEYOR_IDLE;
-  }
 }
 
 void calibrate_conveyor() {
@@ -76,7 +72,7 @@ void calibrate_conveyor() {
 void check_conveyor() {
   switch (conveyor_state){
     case CONVEYOR_STATE::ADVANCING_TO_NEXT_DISC_EDGE:
-      if (edge_beam_broken()) {
+      if (backup_beam_broken() && started_advancing_time+1000 < millis()) { // go forward at least one second, then beam broken again
         stop_conveyor();
         conveyor_state = CONVEYOR_STATE::WAITING_FOR_INTAKE;
       }
@@ -91,7 +87,7 @@ void check_conveyor() {
       }
       break;
     case CONVEYOR_STATE::BACKUP:
-      if (edge_beam_broken()) {
+      if (backup_beam_broken()) {
         stop_conveyor();
         conveyor_state = CONVEYOR_STATE::CONVEYOR_IDLE;
         main_conveyor_module->publish_status(MODULE_STATUS::COMPLETE);
@@ -418,7 +414,7 @@ void setup() {
   nh.advertise(weight_feedback_pub);
   
   // conveyor pins 
-  pinMode(EDGE_BEAM_BREAK_PIN, INPUT_PULLUP) ;
+  pinMode(BACKUP_BEAM_BREAK_PIN, INPUT_PULLUP) ;
   pinMode(CENTER_BEAM_BREAK_PIN, INPUT_PULLUP) ;
   pinMode(SPEED_PIN,OUTPUT) ;
   pinMode(INVERT_PIN, OUTPUT) ;
