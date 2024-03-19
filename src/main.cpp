@@ -244,11 +244,11 @@ void parseIncomingData() {
 // ----- FLEX ----- 
 
 MODULE* flex_module;
-int dir_pin = D11;// Verify this pin 
-int step_pin = D12;// Verify this pin 
-int sleep_pin = D6; // Verify this pin 
-int UPPER_LIMIT_SWITCH_PIN = D3; // Verify this pin 
-int LOWER_LIMIT_SWITCH_PIN = D4; // Verify this pin
+int dir_pin = D9; 
+int step_pin = D10; 
+int sleep_pin = D6; // Verify this pin  // FIX LAST ONE
+int UPPER_LIMIT_SWITCH_PIN = A7; 
+int LOWER_LIMIT_SWITCH_PIN = A6; 
 
 enum FLEX_STATE {
   FLEX_IDLE = 0,
