@@ -246,15 +246,14 @@ void parseIncomingData() {
 MODULE* flex_module;
 int dir_pin = D9; 
 int step_pin = D10; 
-int sleep_pin = D6; // Verify this pin  // FIX LAST ONE
+// int sleep_pin = D6; // Verify this pin  // FIX LAST ONE
 int UPPER_LIMIT_SWITCH_PIN = A7; 
 int LOWER_LIMIT_SWITCH_PIN = A6; 
 
 enum FLEX_STATE {
   FLEX_IDLE = 0,
   FLEX_RAISING = 1,
-  FLEX_SPINNING = 2,
-  FLEX_LOWERING = 3
+  FLEX_LOWERING = 2
 };
 FLEX_STATE flex_state = FLEX_STATE::FLEX_IDLE;
 
@@ -298,6 +297,8 @@ void calibrate_flex() {
 
 void check_flex() {
 
+  // sleep_pin 
+
   // drive the motor if the flag has been set to run it // TODO implimet the sleep pin as well 
   if ((yaxis_motor_last_step+2 < millis()) && run_yaxis_motor == true) {
     loginfo("triggered correctly");
@@ -327,14 +328,11 @@ void check_flex() {
 
       if (upper_limit_switched() == true) {
         run_yaxis_motor = false; 
-        flex_state = FLEX_STATE::FLEX_SPINNING; 
+        flex_state = FLEX_STATE::FLEX_LOWERING; 
         run_spin_motor = true; 
         spin_motor_last_step = millis();
       }
       
-      break;
-    case FLEX_STATE::FLEX_SPINNING:
-    //TALK TO THE PI TO TAKE PICTURES
       break;
     case FLEX_STATE::FLEX_LOWERING:
       if (lower_limit_switched()) {
@@ -425,11 +423,11 @@ void setup() {
   pinMode(SCALE_RELAY__TARE_PIN, OUTPUT);
 
   // flex pins
-  // pinMode(dir_pin, OUTPUT);
-  // pinMode(step_pin, OUTPUT);
+  pinMode(dir_pin, OUTPUT);
+  pinMode(step_pin, OUTPUT);
   // pinMode(sleep_pin, OUTPUT);
-  // pinMode(UPPER_LIMIT_SWITCH_PIN, INPUT_PULLUP);
-  // pinMode(LOWER_LIMIT_SWITCH_PIN, INPUT_PULLUP);
+  pinMode(UPPER_LIMIT_SWITCH_PIN, INPUT_PULLUP);
+  pinMode(LOWER_LIMIT_SWITCH_PIN, INPUT_PULLUP);
 
   // height pins
   //pinMode(HEIGHT_SENSOR_PIN, INPUT_PULLUP);
