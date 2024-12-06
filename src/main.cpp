@@ -1,109 +1,131 @@
 #define NODE_NAME String("module_b")
 #define STATUS_FREQ 1500 // ms
 
+#include <Arduino.h>
 #include <std_node.cpp>
 #include <std_msgs/Bool.h>
 #include <std_msgs/Float32.h>
-#include <Arduino.h>
 #include <HardwareSerial.h> //for scale
+
+#define Serial SerialUSB
 
 // ----- MAIN CONVEYOR -----
 
-MODULE* main_conveyor_module;
-int BACKUP_BEAM_BREAK_PIN = D2; // Verified this pin as the black beam break 
-int CENTER_BEAM_BREAK_PIN = D3; //Verified this pin as the green beam break
-int SPEED_PIN = A0;
-int INVERT_PIN = D13;
+MODULE *main_conveyor_module;
+int BACKUP_BEAM_BREAK_PIN = 2; // Verified this pin as the black beam break
+int CENTER_BEAM_BREAK_PIN = 5; // Verified this pin as the green beam break
+int SPEED_PIN = 11;
+int INVERT_PIN = 4;
 
-enum CONVEYOR_STATE {
-    CONVEYOR_IDLE = 0, 
-    ADVANCING_TO_NEXT_DISC_EDGE = 1,
-    WAITING_FOR_INTAKE = 2,
-    MOVING_TO_CENTER = 3, 
-    BACKUP = 4};
-CONVEYOR_STATE conveyor_state = CONVEYOR_STATE::CONVEYOR_IDLE; 
+enum CONVEYOR_STATE
+{
+  CONVEYOR_IDLE = 0,
+  ADVANCING_TO_NEXT_DISC_EDGE = 1,
+  WAITING_FOR_INTAKE = 2,
+  MOVING_TO_CENTER = 3,
+  BACKUP = 4
+};
+CONVEYOR_STATE conveyor_state = CONVEYOR_STATE::CONVEYOR_IDLE;
 
 long last_conveyor_center_time = millis();
 
-void move_forward(int speed = 230) {
+void move_forward(int speed = 230)
+{
   digitalWrite(INVERT_PIN, LOW);
   analogWrite(SPEED_PIN, speed); // start
   loginfo("conveyor moving forward");
 }
 
-void move_backward(int speed = 230) {
+void move_backward(int speed = 230)
+{
   digitalWrite(INVERT_PIN, HIGH);
   analogWrite(SPEED_PIN, speed); // start
   loginfo("conveyor moving backward");
 }
 
-bool backup_beam_broken() {
+bool backup_beam_broken()
+{
   return (digitalRead(BACKUP_BEAM_BREAK_PIN) == 0);
 }
 
-bool center_beam_broken() {
+bool center_beam_broken()
+{
   return (digitalRead(CENTER_BEAM_BREAK_PIN) == 0);
 }
 
 unsigned long started_advancing_time = millis();
-void start_conveyor() {
-  if (conveyor_state == CONVEYOR_STATE::CONVEYOR_IDLE) {
+void start_conveyor()
+{
+  if (conveyor_state == CONVEYOR_STATE::CONVEYOR_IDLE)
+  {
     loginfo("start_conveyor in IDLE --> advancing disc");
     conveyor_state = CONVEYOR_STATE::ADVANCING_TO_NEXT_DISC_EDGE;
     started_advancing_time = millis();
     move_forward();
-  } else if (conveyor_state == CONVEYOR_STATE::WAITING_FOR_INTAKE) {
+  }
+  else if (conveyor_state == CONVEYOR_STATE::WAITING_FOR_INTAKE)
+  {
     loginfo("start_conveyor in WAITING FOR INTAKE --> centering discs");
     conveyor_state = CONVEYOR_STATE::MOVING_TO_CENTER;
     move_forward();
-  } else {
+  }
+  else
+  {
     logwarn("start_conveyor called in invalid state, " + String((int)conveyor_state));
-  }  
+  }
 }
 
-void stop_conveyor() {
+void stop_conveyor()
+{
   analogWrite(SPEED_PIN, 0); // stop
 }
 
-void calibrate_conveyor() {
-  loginfo("calibrate conveyor; TODO"); //TODO: Implement calibration
+void calibrate_conveyor()
+{
+  loginfo("calibrate conveyor; TODO"); // TODO: Implement calibration
 }
 
-void check_conveyor() {
-  switch (conveyor_state){
-    case CONVEYOR_STATE::ADVANCING_TO_NEXT_DISC_EDGE:
-      if (backup_beam_broken() && started_advancing_time+1000 < millis()) { // go forward at least one second, then beam broken again
-        stop_conveyor();
-        conveyor_state = CONVEYOR_STATE::WAITING_FOR_INTAKE;
-      }
-      break;
-    case CONVEYOR_STATE::WAITING_FOR_INTAKE:
-      // next state is triggered by signal from intake module via Pi
-      break;
-    case CONVEYOR_STATE::MOVING_TO_CENTER:
-      if (center_beam_broken()) {
-        conveyor_state = CONVEYOR_STATE::BACKUP;
-        move_backward();
-      }
-      break;
-    case CONVEYOR_STATE::BACKUP:
-      if (backup_beam_broken()) {
-        stop_conveyor();
-        conveyor_state = CONVEYOR_STATE::CONVEYOR_IDLE;
-        main_conveyor_module->publish_status(MODULE_STATUS::COMPLETE);
-      }
-      break;
-    case CONVEYOR_STATE::CONVEYOR_IDLE:
+void check_conveyor()
+{
+  switch (conveyor_state)
+  {
+  case CONVEYOR_STATE::ADVANCING_TO_NEXT_DISC_EDGE:
+    if (backup_beam_broken() && started_advancing_time + 1000 < millis())
+    { // go forward at least one second, then beam broken again
       stop_conveyor();
-      break;
-    default:
-      logwarn("Invalid conveyor state");
-      break;
+      conveyor_state = CONVEYOR_STATE::WAITING_FOR_INTAKE;
+    }
+    break;
+  case CONVEYOR_STATE::WAITING_FOR_INTAKE:
+    // next state is triggered by signal from intake module via Pi
+    break;
+  case CONVEYOR_STATE::MOVING_TO_CENTER:
+    if (center_beam_broken())
+    {
+      conveyor_state = CONVEYOR_STATE::BACKUP;
+      move_backward();
+    }
+    break;
+  case CONVEYOR_STATE::BACKUP:
+    if (backup_beam_broken())
+    {
+      stop_conveyor();
+      conveyor_state = CONVEYOR_STATE::CONVEYOR_IDLE;
+      main_conveyor_module->publish_status(MODULE_STATUS::COMPLETE);
+    }
+    break;
+  case CONVEYOR_STATE::CONVEYOR_IDLE:
+    stop_conveyor();
+    break;
+  default:
+    logwarn("Invalid conveyor state");
+    break;
   }
-  main_conveyor_module->publish_state((int) conveyor_state);
+  main_conveyor_module->publish_state((int)conveyor_state);
 }
 
-bool verify_conveyor_complete() {
+bool verify_conveyor_complete()
+{
   return conveyor_state == CONVEYOR_STATE::CONVEYOR_IDLE;
 }
 
@@ -127,7 +149,7 @@ bool verify_conveyor_complete() {
 
 // enum SCALE_STATE {
 //     SCALE_IDLE = 0,
-//     MEASURING = 1, 
+//     MEASURING = 1,
 //     TARING = 2,
 //     POWERING_ON = 3,
 //     POWERING_OFF = 4};
@@ -135,7 +157,6 @@ bool verify_conveyor_complete() {
 
 // unsigned long last_scale_data_time = millis();
 // unsigned long start_scale_action_time = millis();
-
 
 // void toggleScalePower() {
 //     digitalWrite(SCALE_RELAY__POWER_PIN, HIGH);
@@ -214,8 +235,8 @@ bool verify_conveyor_complete() {
 //     static byte ndx = 0;
 //     char rc;
 //     char startMarker = '+';
-//     char endMarker = '\n'; 
- 
+//     char endMarker = '\n';
+
 //     while (scaleSerial.available() > 0) {
 //         rc = scaleSerial.read();
 //         if (recvInProgress == true) {
@@ -241,14 +262,14 @@ bool verify_conveyor_complete() {
 //     }
 // }
 
-// // ----- FLEX ----- 
+// // ----- FLEX -----
 
 // MODULE* flex_module;
-// int dir_pin = D9; 
-// int step_pin = D10; 
+// int dir_pin = D9;
+// int step_pin = D10;
 // // int sleep_pin = D6; // Verify this pin  // FIX LAST ONE
-// int UPPER_LIMIT_SWITCH_PIN = A7; 
-// int LOWER_LIMIT_SWITCH_PIN = A6; 
+// int UPPER_LIMIT_SWITCH_PIN = A7;
+// int LOWER_LIMIT_SWITCH_PIN = A6;
 
 // enum FLEX_STATE {
 //   FLEX_IDLE = 0,
@@ -256,7 +277,6 @@ bool verify_conveyor_complete() {
 //   FLEX_LOWERING = 2
 // };
 // FLEX_STATE flex_state = FLEX_STATE::FLEX_IDLE;
-
 
 // bool upper_limit_switched() { // FINISH THIS FUNCTION after wiring
 //   return (digitalRead(UPPER_LIMIT_SWITCH_PIN) == 1);
@@ -274,20 +294,19 @@ bool verify_conveyor_complete() {
 // long yaxis_motor_last_step = millis();
 // bool yaxis_motor_last_digital_write = false;
 
-// bool run_spin_motor = false; 
+// bool run_spin_motor = false;
 // long spin_motor_last_step = millis();
 // bool spin_motor_last_digital_write = false;
 
-
 // void start_flex() {
 //   flex_state = FLEX_STATE::FLEX_RAISING;
-//   run_yaxis_motor = true; 
+//   run_yaxis_motor = true;
 //   yaxis_motor_last_step = millis();
 // }
 
 // void stop_flex() {
-//   run_yaxis_motor = false; 
-//   run_spin_motor = false; 
+//   run_yaxis_motor = false;
+//   run_spin_motor = false;
 //   flex_state = FLEX_STATE::FLEX_IDLE;
 // }
 
@@ -297,9 +316,9 @@ bool verify_conveyor_complete() {
 
 // void check_flex() {
 
-//   // sleep_pin 
+//   // sleep_pin
 
-//   // drive the motor if the flag has been set to run it // TODO implimet the sleep pin as well 
+//   // drive the motor if the flag has been set to run it // TODO implimet the sleep pin as well
 //   if ((yaxis_motor_last_step+2 < millis()) && run_yaxis_motor == true) {
 //     loginfo("triggered correctly");
 
@@ -307,41 +326,40 @@ bool verify_conveyor_complete() {
 //     digitalWrite(step_pin, HIGH);
 //     delay(2);
 //     digitalWrite(step_pin, LOW);
-//     delay(2); 
+//     delay(2);
 
-//     yaxis_motor_last_digital_write = !yaxis_motor_last_digital_write; 
-//     yaxis_motor_last_step = millis(); 
+//     yaxis_motor_last_digital_write = !yaxis_motor_last_digital_write;
+//     yaxis_motor_last_step = millis();
 //   }
 
 //   if ((spin_motor_last_step+2 < millis()) && run_spin_motor == true) {
 //     digitalWrite(step_pin, !spin_motor_last_digital_write);
-//     spin_motor_last_digital_write = !spin_motor_last_digital_write; 
+//     spin_motor_last_digital_write = !spin_motor_last_digital_write;
 //     spin_motor_last_step = millis();
 //   }
 
-
 //   switch (flex_state) {
 //     case FLEX_STATE::FLEX_IDLE:
-      
+
 //       break;
 //     case FLEX_STATE::FLEX_RAISING:
 
 //       if (upper_limit_switched() == true) {
-//         run_yaxis_motor = false; 
-//         flex_state = FLEX_STATE::FLEX_LOWERING; 
-//         run_spin_motor = true; 
+//         run_yaxis_motor = false;
+//         flex_state = FLEX_STATE::FLEX_LOWERING;
+//         run_spin_motor = true;
 //         spin_motor_last_step = millis();
 //       }
-      
+
 //       break;
 //     case FLEX_STATE::FLEX_LOWERING:
 //       if (lower_limit_switched()) {
-//         run_yaxis_motor = false; 
-//         run_spin_motor = false; 
-//         flex_state = FLEX_STATE::FLEX_IDLE; 
+//         run_yaxis_motor = false;
+//         run_spin_motor = false;
+//         flex_state = FLEX_STATE::FLEX_IDLE;
 //         flex_module->publish_status(MODULE_STATUS::COMPLETE);
 //       }
-      
+
 //       break;
 //   }
 //   flex_module->publish_state((int) flex_state);
@@ -380,27 +398,27 @@ bool verify_conveyor_complete() {
 //   loginfo("check height; TODO"); //TODO: Implement height
 // }
 
-
 // ----- loop/setup functions -----
-void setup() {
+void setup()
+{
   init_std_node();
-//   scale_module = init_module("scale",
-//     start_scale, 
-//     verify_scale_complete, 
-//     stop_scale,
-//     calibrate_scale);
+  //   scale_module = init_module("scale",
+  //     start_scale,
+  //     verify_scale_complete,
+  //     stop_scale,
+  //     calibrate_scale);
 
   main_conveyor_module = init_module("main_conveyor",
-    start_conveyor, 
-    verify_conveyor_complete, 
-    stop_conveyor,
-    calibrate_conveyor);
-  
-//   flex_module = init_module("flex",
-//     start_flex, 
-//     verify_flex_complete, 
-//     stop_flex,
-//     calibrate_flex);
+                                     start_conveyor,
+                                     verify_conveyor_complete,
+                                     stop_conveyor,
+                                     calibrate_conveyor);
+
+  //   flex_module = init_module("flex",
+  //     start_flex,
+  //     verify_flex_complete,
+  //     stop_flex,
+  //     calibrate_flex);
 
   // height_module = init_module("height",
   //   start_height,
@@ -408,44 +426,44 @@ void setup() {
   //   stop_height,
   //   calibrate_height);
 
-  //Register ROS publishers
-//   nh.advertise(weight_feedback_pub);
-  
-  // conveyor pins 
-  pinMode(BACKUP_BEAM_BREAK_PIN, INPUT_PULLUP) ;
-  pinMode(CENTER_BEAM_BREAK_PIN, INPUT_PULLUP) ;
-  pinMode(SPEED_PIN,OUTPUT) ;
-  pinMode(INVERT_PIN, OUTPUT) ;
+  // Register ROS publishers
+  //   nh.advertise(weight_feedback_pub);
+
+  // conveyor pins
+  pinMode(BACKUP_BEAM_BREAK_PIN, INPUT_PULLUP);
+  pinMode(CENTER_BEAM_BREAK_PIN, INPUT_PULLUP);
+  pinMode(SPEED_PIN, OUTPUT);
+  pinMode(INVERT_PIN, OUTPUT);
 
   // scale pins
-//   scaleSerial.begin(9600);
-//   pinMode(SCALE_RELAY__POWER_PIN, OUTPUT);
-//   pinMode(SCALE_RELAY__TARE_PIN, OUTPUT);
+  //   scaleSerial.begin(9600);
+  //   pinMode(SCALE_RELAY__POWER_PIN, OUTPUT);
+  //   pinMode(SCALE_RELAY__TARE_PIN, OUTPUT);
 
   // flex pins
-//   pinMode(dir_pin, OUTPUT);
-//   pinMode(step_pin, OUTPUT);
-//   // pinMode(sleep_pin, OUTPUT);
-//   pinMode(UPPER_LIMIT_SWITCH_PIN, INPUT_PULLUP);
-//   pinMode(LOWER_LIMIT_SWITCH_PIN, INPUT_PULLUP);
+  //   pinMode(dir_pin, OUTPUT);
+  //   pinMode(step_pin, OUTPUT);
+  //   // pinMode(sleep_pin, OUTPUT);
+  //   pinMode(UPPER_LIMIT_SWITCH_PIN, INPUT_PULLUP);
+  //   pinMode(LOWER_LIMIT_SWITCH_PIN, INPUT_PULLUP);
 
   // height pins
-  //pinMode(HEIGHT_SENSOR_PIN, INPUT_PULLUP);
+  // pinMode(HEIGHT_SENSOR_PIN, INPUT_PULLUP);
 
   loginfo("setup() Complete");
 }
 
-
-void loop() {
+void loop()
+{
   periodic_status();
   nh.spinOnce();
-//   parseIncomingData();
-//   check_scale();
+  //   parseIncomingData();
+  //   check_scale();
   check_conveyor();
-//   check_flex();
-  //check_height();
+  //   check_flex();
+  // check_height();
 
-  // ----- testing ----- 
+  // ----- testing -----
   // if (verify_motion_complete()) {
   //   loginfo("debugging test reset");
   //   delay(5000);
