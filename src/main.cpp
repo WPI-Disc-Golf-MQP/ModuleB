@@ -43,34 +43,56 @@ void move_backward(int speed = 230)
   loginfo("conveyor moving backward");
 }
 
-bool backup_beam_broken()
-{
+bool val = 0;
+
+bool backup_beam_broken() {
+
+  // logging function 
+  if (digitalRead(BACKUP_BEAM_BREAK_PIN) != val) {
+    loginfo("Intake backup beam break changed state to: "+String(digitalRead(BACKUP_BEAM_BREAK_PIN)));
+    val = digitalRead(BACKUP_BEAM_BREAK_PIN);
+  }
+  // -- 
+
   return (digitalRead(BACKUP_BEAM_BREAK_PIN) == 0);
 }
 
-bool center_beam_broken()
-{
+//bool backup_beam_broken() {
+  //return (digitalRead(BACKUP_BEAM_BREAK_PIN) == 0);
+//}
+
+
+bool center_beam_broken() {
+
+  // logging function 
+  if (digitalRead(CENTER_BEAM_BREAK_PIN) != val) {
+    loginfo("Intake center beam break changed state to: "+String(digitalRead(CENTER_BEAM_BREAK_PIN)));
+    val = digitalRead(CENTER_BEAM_BREAK_PIN);
+  }
+  // -- 
+
   return (digitalRead(CENTER_BEAM_BREAK_PIN) == 0);
 }
 
+//bool center_beam_broken() {
+  //return (digitalRead(CENTER_BEAM_BREAK_PIN) == 0);
+//}
+
 unsigned long started_advancing_time = millis();
-void start_conveyor()
-{
-  if (conveyor_state == CONVEYOR_STATE::CONVEYOR_IDLE)
-  {
+
+void start_conveyor() {
+  if (conveyor_state == CONVEYOR_STATE::CONVEYOR_IDLE) {
     loginfo("start_conveyor in IDLE --> advancing disc");
     conveyor_state = CONVEYOR_STATE::ADVANCING_TO_NEXT_DISC_EDGE;
     started_advancing_time = millis();
     move_forward();
-  }
-  else if (conveyor_state == CONVEYOR_STATE::WAITING_FOR_INTAKE)
-  {
+  } 
+  else if (conveyor_state == CONVEYOR_STATE::WAITING_FOR_INTAKE) {
     loginfo("start_conveyor in WAITING FOR INTAKE --> centering discs");
     conveyor_state = CONVEYOR_STATE::MOVING_TO_CENTER;
     move_forward();
-  }
-  else
-  {
+  } 
+  else {
     logwarn("start_conveyor called in invalid state, " + String((int)conveyor_state));
   }
 }
@@ -85,41 +107,35 @@ void calibrate_conveyor()
   loginfo("calibrate conveyor; TODO"); // TODO: Implement calibration
 }
 
-void check_conveyor()
-{
-  switch (conveyor_state)
-  {
-  case CONVEYOR_STATE::ADVANCING_TO_NEXT_DISC_EDGE:
-    if (backup_beam_broken() && started_advancing_time + 1000 < millis())
-    { // go forward at least one second, then beam broken again
+void check_conveyor() {
+  switch (conveyor_state){
+    case CONVEYOR_STATE::ADVANCING_TO_NEXT_DISC_EDGE:
+      if (backup_beam_broken() && started_advancing_time+1000 < millis()) { // go forward at least one second, then beam broken again
+        stop_conveyor();
+        conveyor_state = CONVEYOR_STATE::WAITING_FOR_INTAKE;
+      }
+      break;
+    case CONVEYOR_STATE::WAITING_FOR_INTAKE:
+      break;
+    case CONVEYOR_STATE::MOVING_TO_CENTER:
+      if (center_beam_broken()) {
+        conveyor_state = CONVEYOR_STATE::BACKUP;
+        move_backward();
+      }
+      break;
+    case CONVEYOR_STATE::BACKUP:
+      if (backup_beam_broken()) {
+        stop_conveyor();
+        conveyor_state = CONVEYOR_STATE::CONVEYOR_IDLE;
+        main_conveyor_module->publish_status(MODULE_STATUS::COMPLETE);
+      }
+      break;
+    case CONVEYOR_STATE::CONVEYOR_IDLE:
       stop_conveyor();
-      conveyor_state = CONVEYOR_STATE::WAITING_FOR_INTAKE;
-    }
-    break;
-  case CONVEYOR_STATE::WAITING_FOR_INTAKE:
-    // next state is triggered by signal from intake module via Pi
-    break;
-  case CONVEYOR_STATE::MOVING_TO_CENTER:
-    if (center_beam_broken())
-    {
-      conveyor_state = CONVEYOR_STATE::BACKUP;
-      move_backward();
-    }
-    break;
-  case CONVEYOR_STATE::BACKUP:
-    if (backup_beam_broken())
-    {
-      stop_conveyor();
-      conveyor_state = CONVEYOR_STATE::CONVEYOR_IDLE;
-      main_conveyor_module->publish_status(MODULE_STATUS::COMPLETE);
-    }
-    break;
-  case CONVEYOR_STATE::CONVEYOR_IDLE:
-    stop_conveyor();
-    break;
-  default:
-    logwarn("Invalid conveyor state");
-    break;
+      break;
+    default:
+      logwarn("Invalid conveyor state");
+      break;
   }
   main_conveyor_module->publish_state((int)conveyor_state);
 }
