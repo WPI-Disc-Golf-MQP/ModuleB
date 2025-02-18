@@ -1,5 +1,6 @@
 #define NODE_NAME String("module_b")
 #define STATUS_FREQ 1500 // ms
+#define Serial SerialUSB
 
 #include <std_node.cpp>
 #include <std_msgs/Bool.h>
@@ -7,7 +8,7 @@
 #include <Arduino.h>
 #include <HardwareSerial.h> //for scale
 
-// ----- MAIN CONVEYOR -----
+/* // ----- MAIN CONVEYOR -----
 
 MODULE* main_conveyor_module;
 int BACKUP_BEAM_BREAK_PIN = D2; // Verified this pin as the black beam break 
@@ -239,16 +240,16 @@ void parseIncomingData() {
             recvInProgress = true;
         }
     }
-}
+} */
 
 // ----- FLEX ----- 
 
 MODULE* flex_module;
-int dir_pin = D9; 
-int step_pin = D10; 
-// int sleep_pin = D6; // Verify this pin  // FIX LAST ONE
-int UPPER_LIMIT_SWITCH_PIN = A7; 
-int LOWER_LIMIT_SWITCH_PIN = A6; 
+int dir_pin = 6;
+int step_pin = 7;
+// int sleep_pin = D6; // Verify this pin  // FIX LAST ONE //un commented, hope it works >.<
+int UPPER_LIMIT_SWITCH_PIN = 12; 
+int LOWER_LIMIT_SWITCH_PIN = 11; 
 
 enum FLEX_STATE {
   FLEX_IDLE = 0,
@@ -330,6 +331,7 @@ void check_flex() {
         run_yaxis_motor = false; 
         flex_state = FLEX_STATE::FLEX_LOWERING; 
         run_spin_motor = true; 
+        printf("upper switch pressed");
         spin_motor_last_step = millis();
       }
       
@@ -339,6 +341,7 @@ void check_flex() {
         run_yaxis_motor = false; 
         run_spin_motor = false; 
         flex_state = FLEX_STATE::FLEX_IDLE; 
+        printf("lower switch pressed");
         flex_module->publish_status(MODULE_STATUS::COMPLETE);
       }
       
@@ -383,7 +386,7 @@ void check_height() {
 
 // ----- loop/setup functions -----
 void setup() {
-  init_std_node();
+ /*  init_std_node();
   scale_module = init_module("scale",
     start_scale, 
     verify_scale_complete, 
@@ -395,7 +398,7 @@ void setup() {
     verify_conveyor_complete, 
     stop_conveyor,
     calibrate_conveyor);
-  
+   */
   flex_module = init_module("flex",
     start_flex, 
     verify_flex_complete, 
@@ -409,7 +412,7 @@ void setup() {
   //   calibrate_height);
 
   //Register ROS publishers
-  nh.advertise(weight_feedback_pub);
+ /*  nh.advertise(weight_feedback_pub);
   
   // conveyor pins 
   pinMode(BACKUP_BEAM_BREAK_PIN, INPUT_PULLUP) ;
@@ -421,7 +424,7 @@ void setup() {
   scaleSerial.begin(9600);
   pinMode(SCALE_RELAY__POWER_PIN, OUTPUT);
   pinMode(SCALE_RELAY__TARE_PIN, OUTPUT);
-
+ */
   // flex pins
   pinMode(dir_pin, OUTPUT);
   pinMode(step_pin, OUTPUT);
@@ -439,9 +442,9 @@ void setup() {
 void loop() {
   periodic_status();
   nh.spinOnce();
-  parseIncomingData();
+  /* parseIncomingData();
   check_scale();
-  check_conveyor();
+  check_conveyor(); */
   check_flex();
   //check_height();
 
