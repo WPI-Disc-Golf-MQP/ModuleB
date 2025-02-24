@@ -272,11 +272,11 @@ bool verify_flex_complete() {
 }
 
 bool run_yaxis_motor = false;
-long yaxis_motor_last_step = millis();
+unsigned long yaxis_motor_last_step = millis();
 bool yaxis_motor_last_digital_write = false;
 
 bool run_spin_motor = false; 
-long spin_motor_last_step = millis();
+unsigned long spin_motor_last_step = millis();
 bool spin_motor_last_digital_write = false;
 
 
