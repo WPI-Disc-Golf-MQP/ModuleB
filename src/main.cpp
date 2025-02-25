@@ -87,7 +87,11 @@ bool verify_conveyor_complete()
 
 void calibrate_conveyor()
 {
-    loginfo("calibrate conveyor; TODO"); // TODO: Implement calibration
+    // starts CONVEYOR_BACKING_UP state so that the conveyor moves to the back up beam break
+    // should be called before starting the conveyor
+    loginfo("calibrating conveyor");
+    conveyor_state = CONVEYOR_STATE::CENTERING;
+    handle_center_beam_broken();
 }
 
 // ---------- ---------- CONVEYOR TIMER CHECK & HANDLE ---------- ----------
