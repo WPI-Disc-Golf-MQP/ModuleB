@@ -247,7 +247,7 @@ void parseIncomingData() {
 MODULE* flex_module;
 int dir_pin = 6;
 int step_pin = 7;
-// int sleep_pin = D6; // Verify this pin  // FIX LAST ONE //un commented, hope it works >.<
+int sleep_pin = 5; // Verify this pin  // FIX LAST ONE //un commented, hope it works >.<
 int UPPER_LIMIT_SWITCH_PIN = 12; 
 int LOWER_LIMIT_SWITCH_PIN = 11; 
 
@@ -331,7 +331,6 @@ void check_flex() {
         run_yaxis_motor = false; 
         flex_state = FLEX_STATE::FLEX_LOWERING; 
         run_spin_motor = true; 
-        printf("upper switch pressed");
         spin_motor_last_step = millis();
       }
       
@@ -341,7 +340,6 @@ void check_flex() {
         run_yaxis_motor = false; 
         run_spin_motor = false; 
         flex_state = FLEX_STATE::FLEX_IDLE; 
-        printf("lower switch pressed");
         flex_module->publish_status(MODULE_STATUS::COMPLETE);
       }
       
@@ -386,8 +384,8 @@ void check_height() {
 
 // ----- loop/setup functions -----
 void setup() {
- /*  init_std_node();
-  scale_module = init_module("scale",
+   init_std_node();
+ /* scale_module = init_module("scale",
     start_scale, 
     verify_scale_complete, 
     stop_scale,
@@ -428,7 +426,7 @@ void setup() {
   // flex pins
   pinMode(dir_pin, OUTPUT);
   pinMode(step_pin, OUTPUT);
-  // pinMode(sleep_pin, OUTPUT);
+  pinMode(sleep_pin, OUTPUT);
   pinMode(UPPER_LIMIT_SWITCH_PIN, INPUT_PULLUP);
   pinMode(LOWER_LIMIT_SWITCH_PIN, INPUT_PULLUP);
 
