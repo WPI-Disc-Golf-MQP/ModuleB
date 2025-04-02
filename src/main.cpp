@@ -1,6 +1,6 @@
 #define NODE_NAME String("module_b")
 #define STATUS_FREQ 1500 // ms
-#define Serial SerialUSB
+// #define Serial SerialUSB
 
 #include <std_node.cpp>
 #include <std_msgs/Bool.h>
