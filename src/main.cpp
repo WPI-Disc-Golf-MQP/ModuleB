@@ -12,11 +12,11 @@
 // ----- SCALE -----
 
 MODULE *scale_module;
-#define SCALE_SERIAL_RX_PIN D4
-#define SCALE_SERIAL_TX_PIN D5 // not used
+#define SCALE_SERIAL_RX_PIN A3
+#define SCALE_SERIAL_TX_PIN A4 // not used
 
-#define SCALE_RELAY_POWER_PIN D11
-#define SCALE_RELAY_TARE_PIN D12
+#define SCALE_RELAY_POWER_PIN A1
+#define SCALE_RELAY_TARE_PIN 13
 
 HardwareSerial scaleSerial(SCALE_SERIAL_RX_PIN, SCALE_SERIAL_TX_PIN);
 const byte numChars = 16;
@@ -32,27 +32,32 @@ enum SCALE_STATE
     SCALE_IDLE = 0,
     MEASURING = 1,
     TARING = 2,
-    POWERING_ON = 3,
-    POWERING_OFF = 4
+    POWERING_ON = 3
 };
 SCALE_STATE scale_state = SCALE_STATE::SCALE_IDLE;
 
-unsigned long last_scale_data_time = millis();
 unsigned long start_scale_action_time = millis();
 
 // ---------- ---------- SCALE FUNCTIONS ---------- ----------
 
-void scale_toggle_power()
+void scale_powering_on_start()
 {
     digitalWrite(SCALE_RELAY_POWER_PIN, HIGH);
-    delay(2000);
+    
+}
+
+void scale_powering_on_stop() 
+{
     digitalWrite(SCALE_RELAY_POWER_PIN, LOW);
 }
 
-void scale_toggle_tare()
+void scale_tare_on()
 {
     digitalWrite(SCALE_RELAY_TARE_PIN, HIGH);
-    delay(2000);
+}
+
+void scale_tare_off()
+{
     digitalWrite(SCALE_RELAY_TARE_PIN, LOW);
 }
 
@@ -120,64 +125,53 @@ bool verify_scale_complete()
 
 void calibrate_scale()
 {
-    loginfo("calibrate scale; TODO"); // TODO: Implement calibration
+    start_scale_action_time = millis();
+    scale_state = SCALE_STATE::POWERING_ON;
+    loginfo("calibrating scale");
 }
 
 // ---------- ---------- SCALE TIMER CHECK & HANDLE ---------- ----------
 
+bool check_scale_timer()
+{
+    return start_scale_action_time + 2000 < millis();
+}
+
+void handle_scale_timer()
+{
+    if (scale_state == SCALE_STATE::MEASURING)
+    {
+        weight_msg.data = lastWeight;
+        scale_state = SCALE_STATE::SCALE_IDLE;
+        scale_module->publish_status(MODULE_STATUS::COMPLETE);
+        loginfo("scale measurement complete: " + String(lastWeight) + " g");
+    }
+    else if (scale_state == SCALE_STATE::TARING)
+    {
+        scale_tare_off();
+        scale_state = SCALE_STATE::SCALE_IDLE;
+    }
+    else if (scale_state == SCALE_STATE::POWERING_ON) 
+    {
+        scale_powering_on_stop();
+        scale_tare_on();
+        start_scale_action_time = millis();
+        scale_state = SCALE_STATE::TARING;
+    }
+}
 
 
 // ---------- ---------- SCALE LOOP ---------- ----------
 
-void check_scale()
+void scale_loop() 
 {
     scale_serial_parse_data();
 
-    switch (scale_state)
-    {
-    case SCALE_STATE::MEASURING:
-        if (start_scale_action_time + 1500 < millis())
-        { // measurement complete
-            weight_msg.data = lastWeight;
-            scale_module->publish_status(MODULE_STATUS::COMPLETE);
-            scale_state = SCALE_STATE::SCALE_IDLE;
-            loginfo("scale measurement complete");
-        }
-        break;
-    case SCALE_STATE::TARING:
-        if (start_scale_action_time + 2000 < millis())
-        { // button press complete
-            digitalWrite(SCALE_RELAY_TARE_PIN, LOW);
-            scale_state = SCALE_STATE::SCALE_IDLE;
-        }
-        break;
-    case SCALE_STATE::POWERING_ON:
-        if (start_scale_action_time + 2000 < millis())
-        { // button press complete
-            digitalWrite(SCALE_RELAY_POWER_PIN, LOW);
-            scale_state = SCALE_STATE::SCALE_IDLE;
-        }
-        break;
-    case SCALE_STATE::POWERING_OFF:
-        if (start_scale_action_time + 2000 < millis())
-        { // button press complete
-            digitalWrite(SCALE_RELAY_POWER_PIN, LOW);
-            scale_state = SCALE_STATE::SCALE_IDLE;
-        }
-        break;
-    case SCALE_STATE::SCALE_IDLE:
-        break;
-    default:
-        break;
-    }
+    if (check_scale_timer())
+        handle_scale_timer();
+
     scale_module->publish_state((int)scale_state);
-
-    // TODO: Implement scale power on
-    //  if (last_scale_data_time+1000 < millis()) { //If we haven't heard from the scale, turn it on!
-    //    scale_state = SCALE_STATE::POWERING_ON;
-    //  }
 }
-
 
 // ----- loop/setup functions -----
 void setup()
@@ -204,5 +198,5 @@ void loop()
 {
     periodic_status();
     nh.spinOnce();
-    check_scale();
+    scale_loop();
 }
