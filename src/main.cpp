@@ -5,20 +5,23 @@
 #include <std_msgs/Bool.h>
 #include <std_msgs/Float32.h>
 #include <Arduino.h>
-#include <HardwareSerial.h> //for scale
+#include <std_msgs/Int32MultiArray.h>
+#include "wiring_private.h"
 
 #define Serial SerialUSB
 
 // ----- SCALE -----
 
 MODULE *scale_module;
-#define SCALE_SERIAL_RX_PIN A3
-#define SCALE_SERIAL_TX_PIN A4 // not used
 
-#define SCALE_RELAY_POWER_PIN A1
+#define SCALE_RELAY_POWER_PIN A0
 #define SCALE_RELAY_TARE_PIN 13
 
-HardwareSerial scaleSerial(SCALE_SERIAL_RX_PIN, SCALE_SERIAL_TX_PIN);
+Uart serial4(&sercom4, A2, A1, SERCOM_RX_PAD_1, UART_TX_PAD_0); // A2 is the RX; A1 is the TX.
+void SERCOM4_Handler()
+{
+    serial4.IrqHandler();
+}
 const byte numChars = 16;
 float lastWeight = 0.0;
 char receivedChars[numChars];
@@ -69,9 +72,9 @@ void scale_serial_parse_data()
     char startMarker = '+';
     char endMarker = '\n';
 
-    while (scaleSerial.available() > 0)
+    while (serial4.available() > 0)
     {
-        rc = scaleSerial.read();
+        rc = serial4.read();
         if (recvInProgress == true)
         {
             if (rc != endMarker)
@@ -187,7 +190,9 @@ void setup()
     nh.advertise(weight_feedback_pub);
 
     // scale pins
-    scaleSerial.begin(9600);
+    // Adding Sercom pins
+    // pinPeripheral(A1, PIO_SERCOM_ALT); // not needed, for TX
+    pinPeripheral(A2, PIO_SERCOM_ALT);
     pinMode(SCALE_RELAY_POWER_PIN, OUTPUT);
     pinMode(SCALE_RELAY_TARE_PIN, OUTPUT);
 
