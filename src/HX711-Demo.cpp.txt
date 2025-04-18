@@ -1,6 +1,6 @@
 #include <Arduino.h>
-
 #include <HX711.h>
+#define Serial SerialUSB
 
 // LEWINS CODE
 
