@@ -13,8 +13,8 @@
 // ----- MAIN CONVEYOR -----
 
 MODULE *conveyor_module;
-int BACKUP_BEAM_BREAK_PIN = 3; // Verified this pin as the green beam break
-int CENTER_BEAM_BREAK_PIN = 2; // Verified this pin as the black beam break
+int BACKUP_BEAM_BREAK_PIN = 2; // Verified this pin as the green beam break
+int CENTER_BEAM_BREAK_PIN = 3; // Verified this pin as the black beam break
 
 enum CONVEYOR_STATE
 {
@@ -29,8 +29,8 @@ unsigned long CONVEYOR_ADVANCING_TIME = millis();
 
 // ---------- ---------- CONVEYOR MOTOR FUNCTIONS ---------- ----------
 
-int CONVEYOR_PIN_SPEED = 11;
-int CONVEYOR_PIN_INVERT = 4;
+int CONVEYOR_PIN_SPEED = 9;
+int CONVEYOR_PIN_INVERT = 6;
 
 void start_conveyor_forward(int speed = 170)
 {
