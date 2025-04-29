@@ -6,138 +6,224 @@
 #include <std_msgs/Bool.h>
 #include <std_msgs/Float32.h>
 #include <Arduino.h>
+#include <HX711.h>
 
-// ----- FLEX ----- 
+// ----- FLEX -----
 
-MODULE* flex_module;
-int dir_pin = 6;
-int step_pin = 7;
-// int sleep_pin = D6; // Verify this pin  // FIX LAST ONE //un commented, hope it works >.<
-int UPPER_LIMIT_SWITCH_PIN = 12; 
-int LOWER_LIMIT_SWITCH_PIN = 11; 
+MODULE *flex_module;
 
-enum FLEX_STATE {
-  FLEX_IDLE = 0,
-  FLEX_RAISING = 1,
-  FLEX_LOWERING = 2
+HX711 flex_load_cell_left;
+HX711 flex_load_cell_right;
+
+int FLEX_MOTOR_DIR_PIN = 7;
+int FLEX_MOTOR_STEP_PIN = 8;
+int FLEX_MOTOR_SLEEP_PIN = A1;
+int FLEX_UPPER_LIMIT_PIN = 4;
+int FLEX_LOWER_LIMIT_PIN = 5;
+int FLEX_LOAD_CELL_LEFT_DOUT_PIN = 12;
+int FLEX_LOAD_CELL_LEFT_SCK_PIN = 13;
+int FLEX_LOAD_CELL_RIGHT_DOUT_PIN = A0;
+int FLEX_LOAD_CELL_RIGHT_SCK_PIN = A3;
+
+enum FLEX_STATE
+{
+    FLEX_IDLE = 0,
+    FLEX_RAISING = 1,
+    FLEX_MEASURING = 2,
+    FLEX_LOWERING = 3
 };
 FLEX_STATE flex_state = FLEX_STATE::FLEX_IDLE;
 
+// ---------- ---------- FLEX STEPPER MOTOR FUNCTIONS ---------- ----------
 
-bool upper_limit_switched() { // FINISH THIS FUNCTION after wiring
-  return (digitalRead(UPPER_LIMIT_SWITCH_PIN) == 1);
+unsigned long FLEX_MOTOR_TIME = 1; // 1000 microseconds
+
+unsigned long flex_motor_previous_time;
+bool check_flex_motor_timer()
+{
+    return millis() - flex_motor_previous_time >= FLEX_MOTOR_TIME;
 }
 
-bool lower_limit_switched() { // FINISH THIS FUNCTION after wiring
-  return (digitalRead(LOWER_LIMIT_SWITCH_PIN) == 1);
+bool flex_motor_pulse;
+int stepper_motor_counter;
+void handle_flex_motor_timer()
+{
+    flex_motor_previous_time = millis();
+    if (flex_state == FLEX_STATE::FLEX_RAISING || flex_state == FLEX_STATE::FLEX_MEASURING || flex_state == FLEX_STATE::FLEX_LOWERING)
+    {
+        digitalWrite(FLEX_MOTOR_STEP_PIN, flex_motor_pulse);
+        flex_motor_pulse = !flex_motor_pulse;
+    }
+    if (flex_state == FLEX_STATE::FLEX_MEASURING)
+    {
+        stepper_motor_counter++;
+    }
 }
 
-bool verify_flex_complete() {
-  return flex_state == FLEX_STATE::FLEX_IDLE;
+void start_flex_motor_raising()
+{
+    FLEX_MOTOR_SLEEP_PIN = HIGH;
+    FLEX_MOTOR_DIR_PIN = HIGH; // this is a guess for now
+    FLEX_MOTOR_STEP_PIN = LOW;
+    flex_motor_pulse = true;
+    flex_motor_previous_time = millis();
+    loginfo("starting stepper motor, raising");
 }
 
-bool run_yaxis_motor = false;
-unsigned long yaxis_motor_last_step = millis();
-bool yaxis_motor_last_digital_write = false;
-
-bool run_spin_motor = false; 
-unsigned long spin_motor_last_step = millis();
-bool spin_motor_last_digital_write = false;
-
-
-void start_flex() {
-  flex_state = FLEX_STATE::FLEX_RAISING;
-  run_yaxis_motor = true; 
-  yaxis_motor_last_step = millis();
+void start_flex_motor_lowering()
+{
+    FLEX_MOTOR_SLEEP_PIN = HIGH;
+    FLEX_MOTOR_DIR_PIN = LOW; // this is a guess for now
+    FLEX_MOTOR_STEP_PIN = LOW;
+    flex_motor_pulse = true;
+    flex_motor_previous_time = millis();
+    loginfo("starting stepper motor, lowering");
 }
 
-void stop_flex() {
-  run_yaxis_motor = false; 
-  run_spin_motor = false; 
-  flex_state = FLEX_STATE::FLEX_IDLE;
+void stop_flex_motor()
+{
+    FLEX_MOTOR_SLEEP_PIN = LOW;
+    loginfo("stopping stepper motor");
 }
 
-void calibrate_flex() {
-  loginfo("calibrate flex; TODO"); //TODO: Implement calibration
+// ---------- ---------- FLEX LIMIT SWITCH CHECK & HANDLE ---------- ----------
+
+bool upper_limit_prev_val = 0;
+bool check_flex_upper_limit()
+{
+    bool upper_limit_val = digitalRead(FLEX_UPPER_LIMIT_PIN); // read upper limit switch pin
+    if (upper_limit_val != upper_limit_prev_val)
+        loginfo("Flex upper limit switch changed to: " + String(upper_limit_val)); // logging function
+    bool Upper_limit_switched = upper_limit_val == 0 && upper_limit_prev_val == 1;
+    upper_limit_prev_val = upper_limit_val; // set previous value to current value
+    return Upper_limit_switched;
 }
 
-void check_flex() {
+void handle_flex_upper_limit()
+{
+    if (flex_state == FLEX_STATE::FLEX_MEASURING)
+    {
+        flex_state = FLEX_STATE::FLEX_MEASURING;
+        loginfo("upper limit switch pressed");
+        stepper_motor_counter = 0;
+        stop_flex_motor();
+        start_flex_motor_raising();
+    }
+}
 
-  // sleep_pin 
+bool lower_limit_prev_val = 0;
+bool check_flex_lower_limit()
+{
+    bool lower_limit_val = digitalRead(FLEX_LOWER_LIMIT_PIN); // read upper limit switch pin
+    if (lower_limit_val != lower_limit_prev_val)
+        loginfo("Flex lower limit switch changed to: " + String(lower_limit_val)); // logging function
+    bool lower_limit_switched = lower_limit_val == 0 && lower_limit_prev_val == 1;
+    lower_limit_prev_val = lower_limit_val; // set previous value to current value
+    return lower_limit_switched;
+}
 
-  // drive the motor if the flag has been set to run it // TODO implimet the sleep pin as well 
-  if ((yaxis_motor_last_step+2 < millis()) && run_yaxis_motor == true) {
-    loginfo("triggered correctly");
+void handle_flex_lower_limit()
+{
+    if (flex_state == FLEX_STATE::FLEX_MEASURING)
+    {
+        flex_state = FLEX_STATE::FLEX_IDLE;
+        loginfo("lower limit switch pressed");
+        stop_flex_motor();
+    }
+}
 
-    // digitalWrite(step_pin, !yaxis_motor_last_digital_write);
-    digitalWrite(step_pin, HIGH);
-    delay(2); // cannot be doing delays
-    digitalWrite(step_pin, LOW);
-    delay(2); 
+// ---------- ---------- FLEX LOAD CELLS FUNCTIONS ---------- ----------
 
-    yaxis_motor_last_digital_write = !yaxis_motor_last_digital_write; 
-    yaxis_motor_last_step = millis(); 
-  }
+long flex_load_cell_reading_left;
+long flex_load_cell_reading_right;
+long FLEX_LOAD_CELL_LIMIT = 1000000000; // TODO: pick a better value
 
-  if ((spin_motor_last_step+2 < millis()) && run_spin_motor == true) {
-    digitalWrite(step_pin, !spin_motor_last_digital_write);
-    spin_motor_last_digital_write = !spin_motor_last_digital_write; 
-    spin_motor_last_step = millis();
-  }
+boolean check_flex_load_cells()
+{
+    if (flex_load_cell_left.is_ready())
+        flex_load_cell_reading_left = flex_load_cell_left.read();
+    if (flex_load_cell_right.is_ready())
+        flex_load_cell_reading_right = flex_load_cell_right.read();
+    return flex_load_cell_reading_left > FLEX_LOAD_CELL_LIMIT || flex_load_cell_reading_right > FLEX_LOAD_CELL_LIMIT;
+}
 
+void handle_flex_load_cells()
+{
+    if (flex_state == FLEX_STATE::FLEX_MEASURING)
+    {
+        flex_state = FLEX_STATE::FLEX_LOWERING;
+        loginfo("displacement: " + String(stepper_motor_counter));
+        loginfo("load cells: " + String(flex_load_cell_reading_left) + " + " + String(flex_load_cell_reading_right));
+        stop_flex_motor();
+        start_flex_motor_lowering();
+    }
+}
 
-  switch (flex_state) {
-    case FLEX_STATE::FLEX_IDLE:
-      
-      break;
-    case FLEX_STATE::FLEX_RAISING:
+// ---------- ---------- ROS FLEX FUNCTIONS ---------- ----------
 
-      if (upper_limit_switched() == true) {
-        run_yaxis_motor = false; 
-        flex_state = FLEX_STATE::FLEX_LOWERING; 
-        run_spin_motor = true; 
-        printf("upper switch pressed");
-        spin_motor_last_step = millis();
-      }
-      
-      break;
-    case FLEX_STATE::FLEX_LOWERING:
-      if (lower_limit_switched()) {
-        run_yaxis_motor = false; 
-        run_spin_motor = false; 
-        flex_state = FLEX_STATE::FLEX_IDLE; 
-        printf("lower switch pressed");
-        flex_module->publish_status(MODULE_STATUS::COMPLETE);
-      }
-      
-      break;
-  }
-  flex_module->publish_state((int) flex_state);
-};
+void handle_flex_start()
+{
+    flex_state = FLEX_STATE::FLEX_RAISING;
+    start_flex_motor_raising();
+}
 
+void handle_flex_stop()
+{
+    flex_state = FLEX_STATE::FLEX_IDLE;
+    stop_flex_motor();
+}
+
+bool verify_flex_complete()
+{
+    return flex_state == FLEX_STATE::FLEX_IDLE;
+}
+
+void calibrate_flex()
+{
+    // TODO: probably start lowering until the lower limit switch is hit
+    loginfo("calibrate flex; TODO");
+}
+
+// ---------- ---------- FLEX LOOP ---------- ----------
+
+void flex_loop()
+{
+    if (check_flex_upper_limit())
+        handle_flex_upper_limit();
+    if (check_flex_lower_limit())
+        handle_flex_lower_limit();
+    if (check_flex_motor_timer())
+        handle_flex_motor_timer();
+    if (check_flex_load_cells())
+        handle_flex_load_cells();
+
+    flex_module->publish_state((int)flex_state);
+}
 
 // ----- loop/setup functions -----
-void setup() {
+void setup()
+{
+    flex_module = init_module("flex",
+                              handle_flex_start,
+                              verify_flex_complete,
+                              handle_flex_stop,
+                              calibrate_flex);
 
-  flex_module = init_module("flex",
-    start_flex, 
-    verify_flex_complete, 
-    stop_flex,
-    calibrate_flex);
+    flex_load_cell_left.begin(FLEX_LOAD_CELL_LEFT_DOUT_PIN, FLEX_LOAD_CELL_LEFT_SCK_PIN);
+    flex_load_cell_right.begin(FLEX_LOAD_CELL_RIGHT_DOUT_PIN, FLEX_LOAD_CELL_RIGHT_SCK_PIN);
 
-  // flex pins
-  pinMode(dir_pin, OUTPUT);
-  pinMode(step_pin, OUTPUT);
-  // pinMode(sleep_pin, OUTPUT);
-  pinMode(UPPER_LIMIT_SWITCH_PIN, INPUT_PULLUP);
-  pinMode(LOWER_LIMIT_SWITCH_PIN, INPUT_PULLUP);
+    pinMode(FLEX_MOTOR_DIR_PIN, OUTPUT);
+    pinMode(FLEX_MOTOR_STEP_PIN, OUTPUT);
+    pinMode(FLEX_MOTOR_SLEEP_PIN, OUTPUT);
+    pinMode(FLEX_UPPER_LIMIT_PIN, INPUT_PULLUP);
+    pinMode(FLEX_LOWER_LIMIT_PIN, INPUT_PULLUP);
 
-  loginfo("setup() Complete");
+    loginfo("setup() Complete");
 }
 
-
-void loop() {
-  periodic_status();
-  nh.spinOnce();
-  check_flex();
+void loop()
+{
+    periodic_status();
+    nh.spinOnce();
+    flex_loop();
 }
