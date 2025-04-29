@@ -101,7 +101,7 @@ bool check_flex_upper_limit()
 
 void handle_flex_upper_limit()
 {
-    if (flex_state == FLEX_STATE::FLEX_MEASURING)
+    if (flex_state == FLEX_STATE::FLEX_RAISING)
     {
         flex_state = FLEX_STATE::FLEX_MEASURING;
         loginfo("upper limit switch pressed");
@@ -136,7 +136,7 @@ void handle_flex_lower_limit()
 
 long flex_load_cell_reading_left;
 long flex_load_cell_reading_right;
-long FLEX_LOAD_CELL_LIMIT = 1000000000; // TODO: pick a better value
+long FLEX_LOAD_CELL_LIMIT = 500000;
 
 boolean check_flex_load_cells()
 {
