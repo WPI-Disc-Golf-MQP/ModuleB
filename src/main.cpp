@@ -32,7 +32,7 @@ Button flex_lower_limit(FLEX_LOWER_LIMIT_PIN);
 unsigned long const FLEX_MOTOR_TIME = 1; // 1000 microseconds
 unsigned long flex_motor_previous_time;
 
-long const MAX_STEPPER_MOTOR_COUNTER = 500000;
+long const MAX_STEPPER_MOTOR_COUNTER = 2500; // each rotation is 0.085 in, 200 counts per rotation
 long flex_motor_counter;
 bool flex_motor_pulse;
 
