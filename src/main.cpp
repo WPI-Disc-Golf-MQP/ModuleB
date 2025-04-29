@@ -36,7 +36,7 @@ long const MAX_STEPPER_MOTOR_COUNTER = 500000;
 long flex_motor_counter;
 bool flex_motor_pulse;
 
-long const FLEX_LOAD_CELL_LIMIT = 500000;
+long const FLEX_LOAD_CELL_LIMIT = 1000000;
 long flex_load_cell_reading_left;
 long flex_load_cell_reading_right;
 
@@ -147,7 +147,7 @@ boolean check_flex_load_cells()
         flex_load_cell_reading_left = flex_load_cell_left.read();
     if (flex_load_cell_right.is_ready())
         flex_load_cell_reading_right = flex_load_cell_right.read();
-    return flex_load_cell_reading_left > FLEX_LOAD_CELL_LIMIT || flex_load_cell_reading_right > FLEX_LOAD_CELL_LIMIT;
+    return flex_load_cell_reading_left + flex_load_cell_reading_right > FLEX_LOAD_CELL_LIMIT;
 }
 
 void handle_flex_load_cells()
