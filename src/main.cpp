@@ -1,19 +1,18 @@
 #define NODE_NAME String("module_b")
 #define STATUS_FREQ 1500 // ms
-// #define Serial SerialUSB
-
 #include <std_node.cpp>
 #include <std_msgs/Bool.h>
 #include <std_msgs/Float32.h>
+
 #include <Arduino.h>
 #include <HX711.h>
+#include <button.h>
+
+// #define Serial SerialUSB
 
 // ----- FLEX -----
 
 MODULE *flex_module;
-
-HX711 flex_load_cell_left;
-HX711 flex_load_cell_right;
 
 int FLEX_MOTOR_DIR_PIN = 7;
 int FLEX_MOTOR_STEP_PIN = 8;
@@ -25,6 +24,22 @@ int FLEX_LOAD_CELL_LEFT_SCK_PIN = 13;
 int FLEX_LOAD_CELL_RIGHT_DOUT_PIN = A0;
 int FLEX_LOAD_CELL_RIGHT_SCK_PIN = A3;
 
+HX711 flex_load_cell_left;
+HX711 flex_load_cell_right;
+Button flex_upper_limit(FLEX_UPPER_LIMIT_PIN);
+Button flex_lower_limit(FLEX_LOWER_LIMIT_PIN);
+
+unsigned long const FLEX_MOTOR_TIME = 1; // 1000 microseconds
+unsigned long flex_motor_previous_time;
+
+long const MAX_STEPPER_MOTOR_COUNTER = 500000;
+long flex_motor_counter;
+bool flex_motor_pulse;
+
+long const FLEX_LOAD_CELL_LIMIT = 500000;
+long flex_load_cell_reading_left;
+long flex_load_cell_reading_right;
+
 enum FLEX_STATE
 {
     FLEX_IDLE = 0,
@@ -35,30 +50,6 @@ enum FLEX_STATE
 FLEX_STATE flex_state = FLEX_STATE::FLEX_IDLE;
 
 // ---------- ---------- FLEX STEPPER MOTOR FUNCTIONS ---------- ----------
-
-unsigned long FLEX_MOTOR_TIME = 1; // 1000 microseconds
-
-unsigned long flex_motor_previous_time;
-bool check_flex_motor_timer()
-{
-    return millis() - flex_motor_previous_time >= FLEX_MOTOR_TIME;
-}
-
-bool flex_motor_pulse;
-int stepper_motor_counter;
-void handle_flex_motor_timer()
-{
-    flex_motor_previous_time = millis();
-    if (flex_state == FLEX_STATE::FLEX_RAISING || flex_state == FLEX_STATE::FLEX_MEASURING || flex_state == FLEX_STATE::FLEX_LOWERING)
-    {
-        digitalWrite(FLEX_MOTOR_STEP_PIN, flex_motor_pulse);
-        flex_motor_pulse = !flex_motor_pulse;
-    }
-    if (flex_state == FLEX_STATE::FLEX_MEASURING)
-    {
-        stepper_motor_counter++;
-    }
-}
 
 void start_flex_motor_raising()
 {
@@ -86,17 +77,39 @@ void stop_flex_motor()
     loginfo("stopping stepper motor");
 }
 
+bool check_flex_motor_timer()
+{
+    return millis() - flex_motor_previous_time >= FLEX_MOTOR_TIME;
+}
+
+void handle_flex_motor_timer()
+{
+    flex_motor_previous_time = millis();
+    if (flex_state == FLEX_STATE::FLEX_RAISING || flex_state == FLEX_STATE::FLEX_MEASURING || flex_state == FLEX_STATE::FLEX_LOWERING)
+    {
+        digitalWrite(FLEX_MOTOR_STEP_PIN, flex_motor_pulse);
+        flex_motor_pulse = !flex_motor_pulse;
+    }
+    if (flex_state == FLEX_STATE::FLEX_MEASURING)
+    {
+        flex_motor_counter++;
+        if (flex_motor_counter > MAX_STEPPER_MOTOR_COUNTER) 
+        {
+            loginfo("max stepper motor displacement reached");
+            flex_state = FLEX_STATE::FLEX_LOWERING;
+            loginfo("displacement: " + String(flex_motor_counter));
+            loginfo("load cells: " + String(flex_load_cell_reading_left) + " + " + String(flex_load_cell_reading_right));
+            stop_flex_motor();
+            start_flex_motor_lowering();
+        }
+    }
+}
+
 // ---------- ---------- FLEX LIMIT SWITCH CHECK & HANDLE ---------- ----------
 
-bool upper_limit_prev_val = 0;
 bool check_flex_upper_limit()
 {
-    bool upper_limit_val = digitalRead(FLEX_UPPER_LIMIT_PIN); // read upper limit switch pin
-    if (upper_limit_val != upper_limit_prev_val)
-        loginfo("Flex upper limit switch changed to: " + String(upper_limit_val)); // logging function
-    bool Upper_limit_switched = upper_limit_val == 0 && upper_limit_prev_val == 1;
-    upper_limit_prev_val = upper_limit_val; // set previous value to current value
-    return Upper_limit_switched;
+    return flex_upper_limit.checkButtonPress();
 }
 
 void handle_flex_upper_limit()
@@ -111,15 +124,9 @@ void handle_flex_upper_limit()
     }
 }
 
-bool lower_limit_prev_val = 0;
 bool check_flex_lower_limit()
 {
-    bool lower_limit_val = digitalRead(FLEX_LOWER_LIMIT_PIN); // read upper limit switch pin
-    if (lower_limit_val != lower_limit_prev_val)
-        loginfo("Flex lower limit switch changed to: " + String(lower_limit_val)); // logging function
-    bool lower_limit_switched = lower_limit_val == 0 && lower_limit_prev_val == 1;
-    lower_limit_prev_val = lower_limit_val; // set previous value to current value
-    return lower_limit_switched;
+    return flex_lower_limit.checkButtonPress();
 }
 
 void handle_flex_lower_limit()
@@ -134,10 +141,6 @@ void handle_flex_lower_limit()
 
 // ---------- ---------- FLEX LOAD CELLS FUNCTIONS ---------- ----------
 
-long flex_load_cell_reading_left;
-long flex_load_cell_reading_right;
-long FLEX_LOAD_CELL_LIMIT = 500000;
-
 boolean check_flex_load_cells()
 {
     if (flex_load_cell_left.is_ready())
@@ -151,6 +154,7 @@ void handle_flex_load_cells()
 {
     if (flex_state == FLEX_STATE::FLEX_MEASURING)
     {
+        loginfo("max load cell limit reached");
         flex_state = FLEX_STATE::FLEX_LOWERING;
         loginfo("displacement: " + String(stepper_motor_counter));
         loginfo("load cells: " + String(flex_load_cell_reading_left) + " + " + String(flex_load_cell_reading_right));
@@ -203,6 +207,8 @@ void flex_loop()
 // ----- loop/setup functions -----
 void setup()
 {
+    // Serial.begin(57600);
+    
     flex_module = init_module("flex",
                               handle_flex_start,
                               verify_flex_complete,
@@ -211,12 +217,12 @@ void setup()
 
     flex_load_cell_left.begin(FLEX_LOAD_CELL_LEFT_DOUT_PIN, FLEX_LOAD_CELL_LEFT_SCK_PIN);
     flex_load_cell_right.begin(FLEX_LOAD_CELL_RIGHT_DOUT_PIN, FLEX_LOAD_CELL_RIGHT_SCK_PIN);
+    flex_upper_limit.init();
+    flex_lower_limit.init();
 
     pinMode(FLEX_MOTOR_DIR_PIN, OUTPUT);
     pinMode(FLEX_MOTOR_STEP_PIN, OUTPUT);
     pinMode(FLEX_MOTOR_SLEEP_PIN, OUTPUT);
-    pinMode(FLEX_UPPER_LIMIT_PIN, INPUT_PULLUP);
-    pinMode(FLEX_LOWER_LIMIT_PIN, INPUT_PULLUP);
 
     loginfo("setup() Complete");
 }
