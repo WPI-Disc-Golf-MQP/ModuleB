@@ -14,15 +14,15 @@
 
 MODULE *flex_module;
 
-int FLEX_MOTOR_DIR_PIN = 7;
-int FLEX_MOTOR_STEP_PIN = 8;
-int FLEX_MOTOR_SLEEP_PIN = A1;
-int FLEX_UPPER_LIMIT_PIN = 4;
-int FLEX_LOWER_LIMIT_PIN = 5;
-int FLEX_LOAD_CELL_LEFT_DOUT_PIN = 12;
-int FLEX_LOAD_CELL_LEFT_SCK_PIN = 13;
-int FLEX_LOAD_CELL_RIGHT_DOUT_PIN = A0;
-int FLEX_LOAD_CELL_RIGHT_SCK_PIN = A3;
+const int FLEX_MOTOR_DIR_PIN = 7;
+const int FLEX_MOTOR_STEP_PIN = 8;
+const int FLEX_MOTOR_SLEEP_PIN = A1;
+const int FLEX_UPPER_LIMIT_PIN = 4;
+const int FLEX_LOWER_LIMIT_PIN = 5;
+const int FLEX_LOAD_CELL_LEFT_DOUT_PIN = 12;
+const int FLEX_LOAD_CELL_LEFT_SCK_13;
+const int FLEX_LOAD_CELL_RIGHT_DOUT_A0;
+const int FLEX_LOAD_CELL_RIGHT_SCK_PIN = A3;
 
 HX711 flex_load_cell_left;
 HX711 flex_load_cell_right;
@@ -34,7 +34,6 @@ unsigned long flex_motor_previous_time;
 
 long const MAX_STEPPER_MOTOR_COUNTER = 2500; // each rotation is 0.085 in, 200 counts per rotation
 long flex_motor_counter;
-bool flex_motor_pulse;
 
 long const FLEX_LOAD_CELL_LIMIT = 1000000;
 long flex_load_cell_reading_left;
@@ -53,27 +52,25 @@ FLEX_STATE flex_state = FLEX_STATE::FLEX_IDLE;
 
 void start_flex_motor_raising()
 {
-    FLEX_MOTOR_SLEEP_PIN = HIGH;
-    FLEX_MOTOR_DIR_PIN = HIGH; // this is a guess for now
-    FLEX_MOTOR_STEP_PIN = LOW;
-    flex_motor_pulse = true;
+    digitalWrite(FLEX_MOTOR_SLEEP_PIN, HIGH);
+    digitalWrite(FLEX_MOTOR_DIR_PIN, HIGH); // this is a guess for now
+    digitalWrite(FLEX_MOTOR_STEP_PIN, LOW);
     flex_motor_previous_time = millis();
     loginfo("starting stepper motor, raising");
 }
 
 void start_flex_motor_lowering()
 {
-    FLEX_MOTOR_SLEEP_PIN = HIGH;
-    FLEX_MOTOR_DIR_PIN = LOW; // this is a guess for now
-    FLEX_MOTOR_STEP_PIN = LOW;
-    flex_motor_pulse = true;
+    digitalWrite(FLEX_MOTOR_SLEEP_PIN, HIGH);
+    digitalWrite(FLEX_MOTOR_DIR_PIN, LOW); // this is a guess for now
+    digitalWrite(FLEX_MOTOR_STEP_PIN, LOW);
     flex_motor_previous_time = millis();
     loginfo("starting stepper motor, lowering");
 }
 
 void stop_flex_motor()
 {
-    FLEX_MOTOR_SLEEP_PIN = LOW;
+    digitalWrite(FLEX_MOTOR_SLEEP_PIN, LOW);
     loginfo("stopping stepper motor");
 }
 
@@ -87,8 +84,7 @@ void handle_flex_motor_timer()
     flex_motor_previous_time = millis();
     if (flex_state == FLEX_STATE::FLEX_RAISING || flex_state == FLEX_STATE::FLEX_MEASURING || flex_state == FLEX_STATE::FLEX_LOWERING)
     {
-        digitalWrite(FLEX_MOTOR_STEP_PIN, flex_motor_pulse);
-        flex_motor_pulse = !flex_motor_pulse;
+        digitalWrite(FLEX_MOTOR_STEP_PIN, !digitalRead(FLEX_MOTOR_STEP_PIN));
     }
     if (flex_state == FLEX_STATE::FLEX_MEASURING)
     {
