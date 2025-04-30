@@ -131,7 +131,7 @@ bool check_flex_lower_limit()
 
 void handle_flex_lower_limit()
 {
-    if (flex_state == FLEX_STATE::FLEX_MEASURING)
+    if (flex_state == FLEX_STATE::FLEX_LOWERING)
     {
         flex_state = FLEX_STATE::FLEX_IDLE;
         loginfo("lower limit switch pressed");
