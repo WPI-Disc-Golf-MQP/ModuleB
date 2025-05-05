@@ -32,10 +32,10 @@ Button flex_lower_limit(FLEX_LOWER_LIMIT_PIN);
 unsigned long const FLEX_MOTOR_TIME = 1; // 1000 microseconds
 unsigned long flex_motor_previous_time;
 
-long const MAX_STEPPER_MOTOR_COUNTER = 2500; // each rotation is 0.085 in, 200 counts per rotation
+long const MAX_STEPPER_MOTOR_COUNTER = 7500; // each rotation is 0.085 in, idk how many counts per rotation
 long flex_motor_counter;
 
-long const FLEX_LOAD_CELL_LIMIT = 1000000;
+long const FLEX_LOAD_CELL_LIMIT = 50000;
 long flex_load_cell_reading_left;
 long flex_load_cell_reading_right;
 
@@ -53,7 +53,7 @@ FLEX_STATE flex_state = FLEX_STATE::FLEX_IDLE;
 void start_flex_motor_raising()
 {
     digitalWrite(FLEX_MOTOR_SLEEP_PIN, HIGH);
-    digitalWrite(FLEX_MOTOR_DIR_PIN, HIGH); // this is a guess for now
+    digitalWrite(FLEX_MOTOR_DIR_PIN, LOW);
     digitalWrite(FLEX_MOTOR_STEP_PIN, LOW);
     flex_motor_previous_time = millis();
     loginfo("starting stepper motor, raising");
@@ -62,7 +62,7 @@ void start_flex_motor_raising()
 void start_flex_motor_lowering()
 {
     digitalWrite(FLEX_MOTOR_SLEEP_PIN, HIGH);
-    digitalWrite(FLEX_MOTOR_DIR_PIN, LOW); // this is a guess for now
+    digitalWrite(FLEX_MOTOR_DIR_PIN, HIGH);
     digitalWrite(FLEX_MOTOR_STEP_PIN, LOW);
     flex_motor_previous_time = millis();
     loginfo("starting stepper motor, lowering");
