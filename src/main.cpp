@@ -264,6 +264,9 @@ long const FLEX_LOAD_CELL_LIMIT = 50000;
 long flex_load_cell_reading_left;
 long flex_load_cell_reading_right;
 
+unsigned long flex_print_previous_time = 0; //To handle measurement time
+const unsigned long FLEX_PRINT_INTERVAL = 30; // milliseconds
+
 enum FLEX_STATE
 {
     FLEX_IDLE = 0,
@@ -314,6 +317,16 @@ void handle_flex_motor_timer()
     if (flex_state == FLEX_STATE::FLEX_MEASURING)
     {
         flex_motor_counter++;
+        // The readings
+        if(millis() - flex_print_previous_time >= FLEX_PRINT_INTERVAL)
+        {
+       flex_print_previous_time = millis();
+       Serial.print("disp: " + String(flex_motor_counter));
+       Serial.print("\tload: "+ String(flex_load_cell_reading_left) + " + " + String(flex_load_cell_reading_right));
+       Serial.print("\tsum:"); Serial.print(flex_load_cell_reading_left + flex_load_cell_reading_right);
+       Serial.println();
+        }
+
         // if counter % 100 : print(count + load cell sum)
         if (flex_motor_counter > MAX_STEPPER_MOTOR_COUNTER) 
         {
