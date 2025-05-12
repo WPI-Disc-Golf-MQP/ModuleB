@@ -237,7 +237,7 @@
 
 // ----- FLEX -----
 
-// MODULE *flex_module;
+//MODULE *flex_module;
 
 const int FLEX_MOTOR_DIR_PIN = 6;
 const int FLEX_MOTOR_STEP_PIN = 8;
@@ -248,6 +248,9 @@ const int FLEX_LOAD_CELL_LEFT_DOUT_PIN = 5;
 const int FLEX_LOAD_CELL_LEFT_SCK_PIN = 4;
 const int FLEX_LOAD_CELL_RIGHT_DOUT_PIN = A3;
 const int FLEX_LOAD_CELL_RIGHT_SCK_PIN = A2;
+//Load cell calibration factors (may not be 100% accurate)
+float Calibration_Factor_Left = 114;
+float Calibration_Factor_Right = 91;
 
 HX711 flex_load_cell_left;
 HX711 flex_load_cell_right;
@@ -256,11 +259,12 @@ Button flex_lower_limit(FLEX_LOWER_LIMIT_PIN);
 
 unsigned long const FLEX_MOTOR_TIME = 1; // milliseconds
 unsigned long flex_motor_previous_time;
-
-long const MAX_STEPPER_MOTOR_COUNTER = 7500; // each rotation is 0.085 in, 200 counts per rotation
+//Changed from 7500 to 8000
+long const MAX_STEPPER_MOTOR_COUNTER = 8000; // each rotation is 0.085 in, 200 counts per rotation
 long flex_motor_counter;
-
-long const FLEX_LOAD_CELL_LIMIT = 50000;
+//changed from 50,000 to 100,000 (and 150,000)
+//NOW changed to 5000 since now it reads in GRAMS and not ADC
+long const FLEX_LOAD_CELL_LIMIT = 5000;
 long flex_load_cell_reading_left;
 long flex_load_cell_reading_right;
 
@@ -334,6 +338,8 @@ void handle_flex_motor_timer()
             flex_state = FLEX_STATE::FLEX_LOWERING;
             Serial.println("displacement: " + String(flex_motor_counter));
             Serial.println("load cells: " + String(flex_load_cell_reading_left) + " + " + String(flex_load_cell_reading_right));
+            Serial.println("sum:"); Serial.print(flex_load_cell_reading_left + flex_load_cell_reading_right);
+            Serial.println();
             stop_flex_motor();
             start_flex_motor_lowering();
         }
@@ -377,13 +383,14 @@ void handle_flex_lower_limit()
 boolean check_flex_load_cells()
 {
     if (flex_load_cell_left.is_ready())
+    //.read changed to .get_units()
     {
-        flex_load_cell_reading_left = flex_load_cell_left.read();
+        flex_load_cell_reading_left = flex_load_cell_left.get_units();
         // Serial.println(String(flex_load_cell_reading_left));
     }
     if (flex_load_cell_right.is_ready())
     {
-        flex_load_cell_reading_right = flex_load_cell_right.read();
+        flex_load_cell_reading_right = flex_load_cell_right.get_units();
         // Serial.println(String(flex_load_cell_reading_right));
     }
     return flex_load_cell_reading_left + flex_load_cell_reading_right > FLEX_LOAD_CELL_LIMIT;
@@ -397,6 +404,8 @@ void handle_flex_load_cells()
         flex_state = FLEX_STATE::FLEX_LOWERING;
         Serial.println("displacement: " + String(flex_motor_counter));
         Serial.println("load cells: " + String(flex_load_cell_reading_left) + " + " + String(flex_load_cell_reading_right));
+        Serial.println("sum:"); Serial.print(flex_load_cell_reading_left + flex_load_cell_reading_right);
+        Serial.println();
         stop_flex_motor();
         start_flex_motor_lowering();
     }
@@ -454,7 +463,11 @@ void setup()
                               calibrate_flex);*/
 
     flex_load_cell_left.begin(FLEX_LOAD_CELL_LEFT_DOUT_PIN, FLEX_LOAD_CELL_LEFT_SCK_PIN);
+    flex_load_cell_left.set_scale(Calibration_Factor_Left);
+   flex_load_cell_left.tare();
     flex_load_cell_right.begin(FLEX_LOAD_CELL_RIGHT_DOUT_PIN, FLEX_LOAD_CELL_RIGHT_SCK_PIN);
+    flex_load_cell_right.set_scale(Calibration_Factor_Right);
+    flex_load_cell_right.tare();
     flex_upper_limit.init();
     flex_lower_limit.init();
 
@@ -473,3 +486,30 @@ void loop()
     // nh.spinOnce();
     flex_loop();
 }
+
+//load cell code (UNUSED)
+
+// // HX711 circuit wiring
+// const int FLEX_LOAD_CELL_LEFT_DOUT_PIN = 5;
+// const int FLEX_LOAD_CELL_LEFT_SCK_PIN = 4;
+// const int FLEX_LOAD_CELL_RIGHT_DOUT_PIN = A3;
+// const int FLEX_LOAD_CELL_RIGHT_SCK_PIN = A2;
+
+// HX711 scale;
+
+// void setup() {
+//   Serial.begin(38400);
+//   Serial.println("HX711 Demo");
+//   Serial.println("Initializing the scale");
+//   //scale.begin(FLEX_LOAD_CELL_LEFT_DOUT_PIN,FLEX_LOAD_CELL_LEFT_SCK_PIN);
+// scale.begin(FLEX_LOAD_CELL_RIGHT_DOUT_PIN,FLEX_LOAD_CELL_RIGHT_SCK_PIN);
+//   scale.set_scale();
+//   scale.tare();    
+// }
+
+//   void loop() {
+//   Serial.println("Put known weight on the scale");
+//   delay(10000);
+//   Serial.println(scale.get_units(10));
+//   delay(10000);    
+//   }
